@@ -99,6 +99,8 @@ export default class LiveCursorPlugin extends Plugin {
     }
   }
 
+  public daemonProcess: any = null;
+
   private reconnectAll() {
     for (const [path, sync] of this.activeSyncs.entries()) {
       if (sync.provider.wsconnected === false) {
@@ -107,7 +109,68 @@ export default class LiveCursorPlugin extends Plugin {
     }
   }
 
+  async startDaemon(): Promise<boolean> {
+    try {
+      let cp: any;
+      try {
+        cp = (window as any).require('child_process');
+      } catch {
+        new Notice('Local background daemon only supported on desktop environments.');
+        return false;
+      }
+
+      if (this.daemonProcess) {
+        return true; // Already active
+      }
+
+      const adapter = this.app.vault.adapter as any;
+      const pluginDir = this.manifest.dir;
+      const absolutePluginDir = adapter.getFullPath(pluginDir);
+      const daemonScriptPath = `${absolutePluginDir}/server_daemon.js`;
+
+      console.log(`[LiveCursor] Spawning server daemon at: ${daemonScriptPath}`);
+      
+      this.daemonProcess = cp.spawn('node', [daemonScriptPath], {
+        env: {
+          PORT: '1234',
+          DB_DIR: `${absolutePluginDir}/data`,
+          PATH: process.env.PATH
+        }
+      });
+
+      this.daemonProcess.stdout.on('data', (data: any) => {
+        console.log(`[Daemon stdout] ${data}`);
+      });
+
+      this.daemonProcess.stderr.on('data', (data: any) => {
+        console.error(`[Daemon stderr] ${data}`);
+      });
+
+      this.daemonProcess.on('close', (code: any) => {
+        console.log(`[Daemon] Process exited with code ${code}`);
+        this.daemonProcess = null;
+      });
+
+      // Simple buffer to let backend warm up
+      await new Promise(resolve => setTimeout(resolve, 800));
+      return true;
+    } catch (e: any) {
+      new Notice(`Failed to launch background daemon: ${e.message}`);
+      return false;
+    }
+  }
+
+  stopDaemon() {
+    if (this.daemonProcess) {
+      console.log('[LiveCursor] Terminating background server daemon...');
+      this.daemonProcess.kill();
+      this.daemonProcess = null;
+      new Notice('Local Server Stopped.');
+    }
+  }
+
   onunload() {
+    this.stopDaemon();
     for (const [path, sync] of this.activeSyncs.entries()) {
       sync.provider.disconnect();
       sync.doc.destroy();
@@ -121,7 +184,6 @@ export default class LiveCursorPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-    // If settings change, we might want to reconnect, but for now we just save.
   }
 
   private syncFile(file: TFile) {
@@ -228,9 +290,56 @@ class LiveCursorSettingTab extends PluginSettingTab {
 
     containerEl.createEl('h2', {text: 'Live Cursor Control Panel'});
 
-    // 1. GENERAL CONFIGURATION SECTION
+    // ✨ Guided Setup Banner
+    const banner = containerEl.createEl('div');
+    banner.style.background = 'var(--background-secondary)';
+    banner.style.border = '1px solid var(--text-accent)';
+    banner.style.borderRadius = '8px';
+    banner.style.padding = '16px';
+    banner.style.marginBottom = '20px';
+    banner.style.position = 'relative';
+    banner.style.overflow = 'hidden';
+
+    banner.createEl('h3', { text: '✨ Guided Setup Wizard' }).style.marginTop = '0';
+    banner.createEl('p', { text: 'Zero-Configuration Real-time Collaboration. Launch a background sync server, register your admin panel, and create standard collaborators in 15 seconds!' });
+
+    const wizardBtn = banner.createEl('button', { text: 'Launch Setup Wizard' });
+    wizardBtn.addClass('mod-cta');
+    wizardBtn.style.padding = '8px 16px';
+    wizardBtn.style.fontSize = '14px';
+    wizardBtn.style.fontWeight = 'bold';
+    wizardBtn.addEventListener('click', () => {
+      new SetupWizardModal(this.app, this.plugin, this).open();
+    });
+
+    // 1. GENERAL CONNECTION & DAEMON SECTION
     containerEl.createEl('h3', {text: 'General Connection'});
-    
+
+    const daemonStatusText = this.plugin.daemonProcess 
+      ? '🟢 Local background sync server is running on port 1234.' 
+      : '🔴 Local background sync server is offline.';
+
+    const daemonSetting = new Setting(containerEl)
+      .setName('Local Background Server')
+      .setDesc(daemonStatusText);
+
+    if (this.plugin.daemonProcess) {
+      daemonSetting.addButton(btn => btn
+        .setButtonText('Stop Server')
+        .onClick(() => {
+          this.plugin.stopDaemon();
+          this.display();
+        }));
+    } else {
+      daemonSetting.addButton(btn => btn
+        .setButtonText('Start Server')
+        .setCta()
+        .onClick(async () => {
+          const started = await this.plugin.startDaemon();
+          if (started) this.display();
+        }));
+    }
+
     new Setting(containerEl)
       .setName('Option 1: Login Portal')
       .setDesc('Configure credentials (Admin or User access levels).')
@@ -250,10 +359,10 @@ class LiveCursorSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('Option 3: Create Local Server')
-      .setDesc('Self-host a secure private backend using Docker.')
+      .setName('Option 3: Advanced Cloud Server')
+      .setDesc('Self-host a robust persistent database cluster using Docker.')
       .addButton(btn => btn
-        .setButtonText('Generate Script')
+        .setButtonText('Generate Compose')
         .onClick(() => {
           new CreateServerModal(this.app).open();
         }));
@@ -263,7 +372,6 @@ class LiveCursorSettingTab extends PluginSettingTab {
       .setDesc('Synchronize plugins, themes, and workspace state (.obsidian folder) with the server.')
       .addButton(button => button
         .setButtonText('Sync Now')
-        .setCta()
         .onClick(async () => {
           button.setDisabled(true);
           button.setButtonText('Syncing...');
@@ -736,6 +844,223 @@ class AdminConsoleModal extends Modal {
     if (this.timer) {
       clearInterval(this.timer);
     }
+    this.contentEl.empty();
+  }
+}
+
+class SetupWizardModal extends Modal {
+  private step = 1;
+  private stepContainer!: HTMLDivElement;
+
+  // Form states
+  private adminPass = '';
+  private userText = '';
+  private userPass = '';
+
+  constructor(app: App, private plugin: LiveCursorPlugin, private tab: LiveCursorSettingTab) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    
+    contentEl.createEl('h2', { text: '✨ Live Cursor Guided Setup Wizard' });
+    
+    this.stepContainer = contentEl.createEl('div');
+    this.renderStep();
+  }
+
+  renderStep() {
+    this.stepContainer.empty();
+
+    // Progress Indicator header
+    const progress = this.stepContainer.createEl('div');
+    progress.style.display = 'flex';
+    progress.style.justifyContent = 'space-between';
+    progress.style.marginBottom = '25px';
+    progress.style.fontWeight = 'bold';
+    progress.style.fontSize = '12px';
+
+    const steps = ['1. Launch Server', '2. Create Admin', '3. Create Collaborator', '4. Complete!'];
+    steps.forEach((name, idx) => {
+      const stepEl = progress.createEl('div', { text: name });
+      if (idx + 1 === this.step) {
+        stepEl.style.color = 'var(--text-accent)';
+      } else if (idx + 1 < this.step) {
+        stepEl.style.color = 'var(--color-green)';
+        stepEl.style.textDecoration = 'line-through';
+      } else {
+        stepEl.style.color = 'var(--text-muted)';
+      }
+    });
+
+    const card = this.stepContainer.createEl('div');
+    card.style.background = 'var(--background-secondary)';
+    card.style.border = '1px solid var(--border-color)';
+    card.style.borderRadius = '6px';
+    card.style.padding = '20px';
+    card.style.marginBottom = '20px';
+
+    if (this.step === 1) {
+      card.createEl('h3', { text: 'Step 1: Start your Private Sync Server' });
+      card.createEl('p', { text: 'Obsidian Live Cursor has a built-in background engine daemon. Click below to launch your secure, sandboxed local sync database process.' });
+
+      if (this.plugin.daemonProcess) {
+        const okText = card.createEl('p', { text: '🟢 Success! Server is running in the background.' });
+        okText.style.color = 'var(--color-green)';
+        okText.style.fontWeight = 'bold';
+
+        new Setting(card)
+          .addButton(btn => btn
+            .setButtonText('Next Step')
+            .setCta()
+            .onClick(() => {
+              this.step = 2;
+              this.renderStep();
+            }));
+      } else {
+        new Setting(card)
+          .addButton(btn => btn
+            .setButtonText('Launch Local Server')
+            .setCta()
+            .onClick(async () => {
+              const ok = await this.plugin.startDaemon();
+              if (ok) {
+                new Notice('Local sync daemon launched successfully!');
+                this.renderStep();
+              }
+            }));
+      }
+    }
+
+    else if (this.step === 2) {
+      card.createEl('h3', { text: 'Step 2: Initialize Server Admin Panel' });
+      card.createEl('p', { text: 'Create a password for your root admin registry account. This lets you securely monitor connections, inspect active sync documents, and invite standard collaborator accounts.' });
+
+      new Setting(card)
+        .setName('Admin Username')
+        .addText(text => text
+          .setValue('admin')
+          .setDisabled(true));
+
+      new Setting(card)
+        .setName('Admin Password')
+        .addText(text => text
+          .setPlaceholder('Enter secure admin password')
+          .setValue(this.adminPass)
+          .onChange(v => this.adminPass = v));
+
+      new Setting(card)
+        .addButton(btn => btn
+          .setButtonText('Initialize Admin Registry')
+          .setCta()
+          .onClick(async () => {
+            if (!this.adminPass) {
+              new Notice('Please set a password for the admin account.');
+              return;
+            }
+            try {
+              // 1. Point local server URL dynamically to port 1234
+              this.plugin.settings.serverUrl = 'ws://localhost:1234/sync';
+              
+              // 2. HTTP call to register admin on the freshly spawned server
+              const httpUrl = 'http://localhost:1234';
+              const registerUrl = `${httpUrl}/api/admin/create-user?user=admin&pass=${encodeURIComponent(this.adminPass)}&new_user=admin&new_pass=${encodeURIComponent(this.adminPass)}`;
+              
+              const res = await requestUrl({ url: registerUrl, method: 'POST' });
+              if (res.status === 200) {
+                // Save admin details temporarily
+                this.plugin.settings.username = 'admin';
+                this.plugin.settings.passwordHash = this.adminPass;
+                await this.plugin.saveSettings();
+
+                new Notice('Root Admin Registry successfully configured!');
+                this.step = 3;
+                this.renderStep();
+              } else {
+                new Notice(`Registry failed: ${res.text}`);
+              }
+            } catch (err: any) {
+              new Notice(`Failed to connect to local server: ${err.message}`);
+            }
+          }));
+    }
+
+    else if (this.step === 3) {
+      card.createEl('h3', { text: 'Step 3: Create Collaborator Profile' });
+      card.createEl('p', { text: 'Create your main editor collaborator account! The wizard will automatically register it on your server, save the credentials, and hook up live editor sync.' });
+
+      new Setting(card)
+        .setName('Collaborator Username')
+        .addText(text => text
+          .setPlaceholder('e.g. Alice')
+          .setValue(this.userText)
+          .onChange(v => this.userText = v));
+
+      new Setting(card)
+        .setName('Collaborator Password')
+        .addText(text => text
+          .setPlaceholder('Enter password')
+          .setValue(this.userPass)
+          .onChange(v => this.userPass = v));
+
+      new Setting(card)
+        .addButton(btn => btn
+          .setButtonText('Create User & Start Syncing')
+          .setCta()
+          .onClick(async () => {
+            if (!this.userText || !this.userPass) {
+              new Notice('Please fill in both fields.');
+              return;
+            }
+            try {
+              // Call local server as admin to register the standard user
+              const httpUrl = 'http://localhost:1234';
+              const adminPass = this.plugin.settings.passwordHash;
+              const createUserUrl = `${httpUrl}/api/admin/create-user?user=admin&pass=${encodeURIComponent(adminPass)}&new_user=${encodeURIComponent(this.userText)}&new_pass=${encodeURIComponent(this.userPass)}`;
+              
+              const res = await requestUrl({ url: createUserUrl, method: 'POST' });
+              if (res.status === 200) {
+                // Override plugin session credentials to standard user so sync works immediately
+                this.plugin.settings.username = this.userText;
+                this.plugin.settings.passwordHash = this.userPass;
+                this.plugin.settings.nickname = this.userText;
+                await this.plugin.saveSettings();
+
+                new Notice(`Collaborator profile "${this.userText}" created and saved!`);
+                this.step = 4;
+                this.renderStep();
+              } else {
+                new Notice(`User creation failed: ${res.text}`);
+              }
+            } catch (err: any) {
+              new Notice(`Failed to register standard user: ${err.message}`);
+            }
+          }));
+    }
+
+    else if (this.step === 4) {
+      card.createEl('h3', { text: '🎉 Setup Complete!' });
+      card.createEl('p', { text: 'Everything has been automatically configured. Your local background sync server is active, credentials have been saved, and live collaborative editing is armed!' });
+
+      const detailList = card.createEl('ul');
+      detailList.createEl('li', { text: '🟢 Server: ws://localhost:1234/sync' });
+      detailList.createEl('li', { text: `🟢 Active Profile: ${this.plugin.settings.username}` });
+      detailList.createEl('li', { text: '🟢 Collaborator Cursor Color: Active' });
+
+      new Setting(card)
+        .addButton(btn => btn
+          .setButtonText('Close & Start Syncing!')
+          .setCta()
+          .onClick(() => {
+            this.close();
+            this.tab.display();
+          }));
+    }
+  }
+
+  onClose() {
     this.contentEl.empty();
   }
 }

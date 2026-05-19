@@ -9534,7 +9534,7 @@ var LiveCursorSettingTab = class extends import_obsidian2.PluginSettingTab {
     banner.style.marginBottom = "20px";
     banner.style.position = "relative";
     banner.style.overflow = "hidden";
-    banner.createEl("h3", { text: "\u2728 Guided Setup Wizard" }).style.marginTop = "0";
+    banner.createEl("h3", { text: "Guided Setup Wizard" }).style.marginTop = "0";
     banner.createEl("p", { text: "Zero-Configuration Real-time Collaboration. Launch a background sync server, register your admin panel, and create standard collaborators in 15 seconds!" });
     const wizardBtn = banner.createEl("button", { text: "Launch Setup Wizard" });
     wizardBtn.addClass("mod-cta");
@@ -9545,7 +9545,7 @@ var LiveCursorSettingTab = class extends import_obsidian2.PluginSettingTab {
       new SetupWizardModal(this.app, this.plugin, this).open();
     });
     containerEl.createEl("h3", { text: "General Connection" });
-    const daemonStatusText = this.plugin.daemonProcess ? "\u{1F7E2} Local background sync server is running on port 1234." : "\u{1F534} Local background sync server is offline.";
+    const daemonStatusText = this.plugin.daemonProcess ? "Local background sync server is running on port 1234." : "Local background sync server is offline.";
     const daemonSetting = new import_obsidian2.Setting(containerEl).setName("Local Background Server").setDesc(daemonStatusText);
     if (this.plugin.daemonProcess) {
       daemonSetting.addButton((btn) => btn.setButtonText("Stop Server").onClick(() => {
@@ -9901,7 +9901,7 @@ var SetupWizardModal = class extends import_obsidian2.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "\u2728 Live Cursor Guided Setup Wizard" });
+    contentEl.createEl("h2", { text: "Live Cursor Guided Setup Wizard" });
     this.stepContainer = contentEl.createEl("div");
     this.renderStep();
   }
@@ -9935,7 +9935,7 @@ var SetupWizardModal = class extends import_obsidian2.Modal {
       card.createEl("h3", { text: "Step 1: Start your Private Sync Server" });
       card.createEl("p", { text: "Obsidian Live Cursor has a built-in background engine daemon. Click below to launch your secure, sandboxed local sync database process." });
       if (this.plugin.daemonProcess) {
-        const okText = card.createEl("p", { text: "\u{1F7E2} Success! Server is running in the background." });
+        const okText = card.createEl("p", { text: "Success! Server is running in the background." });
         okText.style.color = "var(--color-green)";
         okText.style.fontWeight = "bold";
         new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Next Step").setCta().onClick(() => {
@@ -10011,12 +10011,12 @@ var SetupWizardModal = class extends import_obsidian2.Modal {
         }
       }));
     } else if (this.step === 4) {
-      card.createEl("h3", { text: "\u{1F389} Setup Complete!" });
+      card.createEl("h3", { text: "Setup Complete!" });
       card.createEl("p", { text: "Everything has been automatically configured. Your local background sync server is active, credentials have been saved, and live collaborative editing is armed!" });
       const detailList = card.createEl("ul");
-      detailList.createEl("li", { text: "\u{1F7E2} Server: ws://localhost:1234/sync" });
-      detailList.createEl("li", { text: `\u{1F7E2} Active Profile: ${this.plugin.settings.username}` });
-      detailList.createEl("li", { text: "\u{1F7E2} Collaborator Cursor Color: Active" });
+      detailList.createEl("li", { text: "Server: ws://localhost:1234/sync" });
+      detailList.createEl("li", { text: `Active Profile: ${this.plugin.settings.username}` });
+      detailList.createEl("li", { text: "Collaborator Cursor Color: Active" });
       new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Close & Start Syncing!").setCta().onClick(() => {
         this.close();
         this.tab.display();

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Cursor | Self-Hosted Real-Time Collaboration for Obsidian</title>
+  <meta name="description" content="A self-hosted, zero-configuration real-time collaborative editing and configuration sync plugin for private Obsidian vaults.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Dynamic glows -->
+  <div class="bg-glow"></div>
+  <div class="bg-glow-bottom"></div>
+
+  <!-- Navigation bar -->
+  <nav>
+    <div class="logo-container">
+      <img src="icon.png" alt="Live Cursor Logo" class="logo-img">
+      <span class="logo-text">Live Cursor</span>
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#workflow">Architecture</a>
+      <a href="https://github.com/Live-Cursor/Live-Cursor" class="btn-github" id="github-link">View on GitHub</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <span class="badge">Version 1.0.0 is Live</span>
+    <h1>Collaborative Real-Time Editing, Directly Inside Obsidian</h1>
+    <p class="hero-subtitle">
+      A lightweight, zero-configuration sync engine that boots a secure local database daemon with a single click. Keep your markdown notes completely private, self-hosted, and sync'd in real time.
+    </p>
+
+    <div class="hero-ctas">
+      <a href="https://github.com/Live-Cursor/Live-Cursor" class="btn-primary">Get Started</a>
+      <a href="#features" class="btn-secondary">Explore Features</a>
+    </div>
+
+    <!-- Live Collaboration Sandbox -->
+    <div class="sandbox-section">
+      <div class="sandbox-header">
+        <div class="window-dots">
+          <div class="dot red"></div>
+          <div class="dot yellow"></div>
+          <div class="dot green"></div>
+        </div>
+        <div class="sandbox-tab">brainstorming.md</div>
+      </div>
+      <div class="sandbox-body" id="sandbox-editor" contenteditable="true">
+        <h2>💡 Collaborative Brainstorming</h2>
+        <p>This is a real-time collaborative sandbox session. Try editing this document!</p>
+        <p>Everyone is working in the same vault, sync'd instantly through your local daemon server...</p>
+        <p id="simulated-text"><strong>Alice:</strong> Setting up the new releases looks clean!</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature Grid -->
+  <section class="features-section" id="features">
+    <h2 class="section-title">Why Live Cursor?</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Zero-Configuration Daemon</h3>
+        <p>No terminal commands or external database systems needed. Live Cursor boots its SQLite WebSocket sync engine in the background with a single toggle.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>100% Privacy-First</h3>
+        <p>Your database files and SQLite assets run entirely on your own local device. Share access with teammates securely without utilizing third-party clouds.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🚀</div>
+        <h3>Conflict-Free Typing</h3>
+        <p>Utilizes advanced real-time operational synchronization algorithms to ensure keystrokes merge instantly without text duplication or overlaps.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>Full Vault Sync</h3>
+        <p>Sync more than just markdown files. Automatically push and pull active vault configurations, active themes, community plugins, and workspace layouts.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Workflow Section -->
+  <section class="workflow-section" id="workflow">
+    <div class="workflow-container">
+      <h2 class="section-title">How it works</h2>
+      <div class="workflow-steps">
+        <div class="step-card">
+          <span class="step-num">Step 01</span>
+          <h4>Spawn Local Engine</h4>
+          <p>The Obsidian plugin spawns a background Node daemon on your host port 1234 securely.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-num">Step 02</span>
+          <h4>Configure Admin Token</h4>
+          <p>Initialize your administrator credentials in Obsidian settings with zero external tools.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-num">Step 03</span>
+          <h4>Invite Teammates</h4>
+          <p>Generate one-click collaborator keys, share the sync link, and collaborate in real-time!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-logo">
+      <img src="icon.png" alt="Live Cursor Logo" class="logo-img">
+      <span>Live Cursor</span>
+    </div>
+    <p class="footer-desc">A beautiful, self-hosted, privacy-first real-time collaborative workspace for your Obsidian vaults.</p>
+    <a href="https://github.com/Live-Cursor/Live-Cursor" class="btn-primary">View GitHub Repository</a>
+    <p class="copyright">Copyright &copy; 2026 Live-Cursor. Released under the MIT License.</p>
+  </footer>
+
+  <!-- Dynamic Simulated Cursors JavaScript -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const editor = document.getElementById('sandbox-editor');
+      const body = document.body;
+
+      // Helper to generate simulated collaborator cursors
+      function createCursor(name, color, startX, startY) {
+        const cursorEl = document.createElement('div');
+        cursorEl.className = 'fake-cursor';
+        cursorEl.style.setProperty('--cursor-color', color);
+        cursorEl.style.left = startX + 'px';
+        cursorEl.style.top = startY + 'px';
+
+        cursorEl.innerHTML = `
+          <div class="cursor-pointer"></div>
+          <div class="cursor-label" style="background-color: ${color}; color: #ffffff;">${name}</div>
+        `;
+        body.appendChild(cursorEl);
+        return cursorEl;
+      }
+
+      // Spawn Alice and Bob
+      const alice = createCursor('Alice', '#6366f1', window.innerWidth * 0.35, window.innerHeight * 0.65);
+      const bob = createCursor('Bob', '#06b6d4', window.innerWidth * 0.6, window.innerHeight * 0.75);
+
+      // Track bounding coordinates of editor sandbox
+      function getEditorCoords() {
+        const rect = editor.getBoundingClientRect();
+        return {
+          left: rect.left + window.scrollX,
+          top: rect.top + window.scrollY,
+          width: rect.width,
+          height: rect.height
+        };
+      }
+
+      // Simulate dynamic real-time movements
+      let step = 0;
+      setInterval(() => {
+        const coords = getEditorCoords();
+        if (!coords.width) return;
+
+        step++;
+
+        // Alice types in editor
+        if (step % 12 === 0) {
+          alice.style.left = (coords.left + coords.width * 0.2 + (Math.sin(step) * 40)) + 'px';
+          alice.style.top = (coords.top + coords.height * 0.6 + (Math.cos(step) * 20)) + 'px';
+        }
+
+        // Bob wanders and edits
+        if (step % 8 === 0) {
+          bob.style.left = (coords.left + coords.width * 0.6 + (Math.cos(step) * 50)) + 'px';
+          bob.style.top = (coords.top + coords.height * 0.5 + (Math.sin(step) * 15)) + 'px';
+        }
+      }, 1000);
+
+      // Listen to user typing to show dynamic interactive notifications
+      editor.addEventListener('input', () => {
+        // Change Alice's cursor to close to the user's focus
+        const coords = getEditorCoords();
+        alice.style.left = (coords.left + coords.width * 0.5 + (Math.random() * 20 - 10)) + 'px';
+        alice.style.top = (coords.top + coords.height * 0.4 + (Math.random() * 10 - 5)) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

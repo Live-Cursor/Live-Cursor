@@ -130,11 +130,14 @@ export default class LiveCursorPlugin extends Plugin {
 
       console.log(`[LiveCursor] Spawning server daemon at: ${daemonScriptPath}`);
       
+      const winProcess = (window as any).process;
+      const envPath = winProcess ? winProcess.env.PATH : '';
+
       this.daemonProcess = cp.spawn('node', [daemonScriptPath], {
         env: {
           PORT: '1234',
           DB_DIR: `${absolutePluginDir}/data`,
-          PATH: process.env.PATH
+          PATH: envPath
         }
       });
 

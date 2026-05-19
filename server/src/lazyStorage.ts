@@ -52,14 +52,17 @@ export class LazyStorage {
 
   private initS3() {
     if (process.env.S3_BUCKET) {
-      this.s3 = new S3Client({
-        endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+      const s3Config: any = {
         region: process.env.S3_REGION || 'auto',
         credentials: {
           accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
           secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
         }
-      });
+      };
+      if (process.env.S3_ENDPOINT) {
+        s3Config.endpoint = process.env.S3_ENDPOINT;
+      }
+      this.s3 = new S3Client(s3Config);
       console.log('[S3 Backup] Automated cloud backup service enabled.');
     }
   }

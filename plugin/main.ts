@@ -568,7 +568,7 @@ services:
 }
 
 class AdminConsoleModal extends Modal {
-  private timer!: NodeJS.Timeout;
+  private timer!: any;
 
   constructor(app: App, private plugin: LiveCursorPlugin) {
     super(app);

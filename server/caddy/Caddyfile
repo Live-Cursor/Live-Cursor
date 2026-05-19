@@ -1,0 +1,16 @@
+{$SYNC_DOMAIN:localhost} {
+    # Route all requests directly to the Node.js websocket backend container
+    reverse_proxy live-cursor-server:1234 {
+        # Standard websocket upgrading headers
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+    }
+
+    # Enable compression for API telemetry requests
+    encode gzip zstd
+
+    # Logging options (perfect for developers tracking connections)
+    log {
+        output file /var/log/caddy/access.log
+    }
+}

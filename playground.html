@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Cursor Playground</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.06);
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      background-image: radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+                        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 40%);
+    }
+
+    .container {
+      max-width: 1200px;
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      padding: 3rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #4338ca 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.05em;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+
+    .status-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      padding: 0.75rem 1.5rem;
+      border-radius: 50px;
+      width: fit-content;
+      margin: 1.5rem auto 0 auto;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 10px #ef4444;
+      transition: all 0.3s ease;
+    }
+
+    .status-indicator.connected {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    .status-text {
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .playground-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 1rem;
+    }
+
+    @media (max-width: 768px) {
+      .playground-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .editor-wrapper {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .editor-header {
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--card-border);
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+
+    .avatar.peer {
+      background: var(--success);
+    }
+
+    .editor-title {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .editor-container {
+      height: 400px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+    }
+
+    /* CodeMirror dark mode customizations */
+    .cm-editor {
+      height: 100% !important;
+      background: transparent !important;
+    }
+    .cm-gutters {
+      background: transparent !important;
+      border-right: 1px solid var(--card-border) !important;
+      color: #4b5563 !important;
+    }
+    .cm-activeLineGutter, .cm-activeLine {
+      background-color: rgba(255, 255, 255, 0.02) !important;
+    }
+
+    /* Live Cursor CSS classes injected dynamically by y-codemirror.next */
+    .cm-ySelectionInfo {
+      padding: 2px 6px;
+      position: absolute;
+      top: -1.5em;
+      left: -2px;
+      font-size: 10px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      color: white;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 100;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      opacity: 0; /* Hidden by default, shown on hover/change */
+    }
+    
+    .cm-ySelection:hover .cm-ySelectionInfo {
+      opacity: 1;
+    }
+    
+    /* Ensure the cursor wrapper has relative positioning for the label */
+    .cm-ySelectionCaret {
+      position: relative;
+      border-left: 2px solid black;
+      border-right: 2px solid black;
+      display: inline-block;
+      margin-left: -1px;
+      margin-right: -1px;
+      box-sizing: border-box;
+    }
+    
+    /* Show labels for a few seconds when they move, or keep them visible - we will just keep them visible for the demo */
+    .cm-ySelectionCaret .cm-ySelectionInfo {
+      opacity: 1;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>Live Sync Playground</h1>
+      <p class="subtitle">Open this page in two separate browser tabs to see zero-friction real-time collaboration in action!</p>
+      
+      <div class="status-panel">
+        <div id="statusIndicator" class="status-indicator"></div>
+        <span id="statusText" class="status-text">Disconnected</span>
+      </div>
+    </header>
+
+    <div class="playground-grid">
+      <!-- Client Tab (Self) -->
+      <div class="editor-wrapper">
+        <div class="editor-header">
+          <div class="avatar">ME</div>
+          <span class="editor-title">Editor 1 (Alice)</span>
+          <button id="toggleNet1" style="margin-left: auto; padding: 4px 12px; background: var(--success); color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.8rem; transition: background 0.3s;">Disconnect</button>
+        </div>
+        <div id="editor1" class="editor-container"></div>
+      </div>
+
+      <!-- Client Tab (Simulated Collaborator) -->
+      <div class="editor-wrapper">
+        <div class="editor-header">
+          <div class="avatar peer">PE</div>
+          <span class="editor-title">Editor 2 (Bob)</span>
+          <button id="toggleNet2" style="margin-left: auto; padding: 4px 12px; background: var(--success); color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 0.8rem; transition: background 0.3s;">Disconnect</button>
+        </div>
+        <div id="editor2" class="editor-container"></div>
+      </div>
+    </div>
+
+    <!-- Diagnostic Panel -->
+    <div style="margin-top: 2rem; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
+      <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted);">Diagnostics Console</h3>
+      <div id="diagnosticsLog" style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; max-height: 150px; overflow-y: auto; color: #ef4444; white-space: pre-wrap;"></div>
+    </div>
+  </div>
+
+  <script>
+    // Visual console logger to catch errors before module scripts load
+    const diagLog = document.getElementById('diagnosticsLog');
+    function logDiag(msg, isError = true) {
+      const line = document.createElement('div');
+      line.style.color = isError ? '#f87171' : '#60a5fa';
+      line.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      diagLog.appendChild(line);
+      diagLog.scrollTop = diagLog.scrollHeight;
+    }
+    window.onerror = function(message, source, lineno, colno, error) {
+      logDiag(`JS Error: ${message} at ${source}:${lineno}:${colno}`);
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(event) {
+      logDiag(`Unhandled Promise Rejection: ${event.reason}`);
+    });
+    logDiag('Diagnostics console initialized.', false);
+  </script>
+
+  <!-- Import Map to guarantee exactly one instance of Yjs and CodeMirror modules in the browser -->
+  <script type="importmap">
+  {
+    "imports": {
+      "yjs": "https://esm.sh/yjs@13.5.40",
+      "y-websocket": "https://esm.sh/y-websocket@1.4.5?deps=yjs@13.5.40",
+      "y-codemirror.next": "https://esm.sh/y-codemirror.next@0.3.2?deps=yjs@13.5.40,@codemirror/state@6.2.1,@codemirror/view@6.12.0",
+      "@codemirror/state": "https://esm.sh/@codemirror/state@6.2.1",
+      "@codemirror/view": "https://esm.sh/@codemirror/view@6.12.0?deps=@codemirror/state@6.2.1"
+    }
+  }
+  </script>
+
+  <!-- Load ESM modules for Yjs, y-websocket, and CodeMirror 6 -->
+  <script type="module">
+    logDiag('Loading ESM modules...', false);
+    import * as Y from 'yjs';
+    import { WebsocketProvider } from 'y-websocket';
+    import { yCollab } from 'y-codemirror.next';
+    import { EditorView } from '@codemirror/view';
+    import { EditorState } from '@codemirror/state';
+    logDiag('ESM modules loaded successfully!', false);
+
+    // Setup for Client 1 (Alice)
+    logDiag('Initializing Alice\'s Y.Doc...', false);
+    const doc1 = new Y.Doc();
+    const text1 = doc1.getText('content');
+    const url = 'ws://localhost:1234/sync';
+    const roomName = 'playground-room';
+
+    const provider1 = new WebsocketProvider(url, roomName, doc1, {
+      params: { user: 'admin', pass: 'admin' }
+    });
+
+    // Set Alice's cursor awareness profile
+    provider1.awareness.setLocalStateField('user', {
+      name: 'Alice',
+      color: '#30bced',
+      colorLight: '#30bced33'
+    });
+
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+    const toggleNet1 = document.getElementById('toggleNet1');
+    const toggleNet2 = document.getElementById('toggleNet2');
+
+    provider1.on('status', (event) => {
+      if (event.status === 'connected') {
+        statusIndicator.className = 'status-indicator connected';
+        statusText.innerText = 'Connected';
+        toggleNet1.innerText = 'Disconnect';
+        toggleNet1.style.background = 'var(--success)';
+      } else {
+        statusIndicator.className = 'status-indicator';
+        statusText.innerText = 'Connecting...';
+        toggleNet1.innerText = 'Connect';
+        toggleNet1.style.background = '#ef4444';
+      }
+    });
+
+    toggleNet1.addEventListener('click', () => {
+      if (provider1.wsconnected) provider1.disconnect();
+      else provider1.connect();
+    });
+
+    try {
+      new EditorView({
+        state: EditorState.create({
+          doc: '',
+          extensions: [yCollab(text1, provider1.awareness)]
+        }),
+        parent: document.getElementById('editor1')
+      });
+      logDiag('Editor 1 (Alice) initialized successfully!', false);
+    } catch (e) {
+      logDiag(`Failed to initialize Editor 1: ${e.message}`);
+    }
+
+    // Setup for Client 2 (Bob)
+    logDiag('Initializing Bob\'s Y.Doc...', false);
+    const doc2 = new Y.Doc();
+    const text2 = doc2.getText('content');
+    
+    const provider2 = new WebsocketProvider(url, roomName, doc2, {
+      params: { user: 'admin', pass: 'admin' }
+    });
+
+    // Set Bob's cursor awareness profile
+    provider2.awareness.setLocalStateField('user', {
+      name: 'Bob',
+      color: '#ffb300',
+      colorLight: '#ffb30033'
+    });
+
+    provider2.on('status', (event) => {
+      if (event.status === 'connected') {
+        toggleNet2.innerText = 'Disconnect';
+        toggleNet2.style.background = 'var(--success)';
+      } else {
+        toggleNet2.innerText = 'Connect';
+        toggleNet2.style.background = '#ef4444';
+      }
+    });
+
+    toggleNet2.addEventListener('click', () => {
+      if (provider2.wsconnected) provider2.disconnect();
+      else provider2.connect();
+    });
+
+    try {
+      new EditorView({
+        state: EditorState.create({
+          doc: '',
+          extensions: [yCollab(text2, provider2.awareness)]
+        }),
+        parent: document.getElementById('editor2')
+      });
+      logDiag('Editor 2 (Bob) initialized successfully!', false);
+    } catch (e) {
+      logDiag(`Failed to initialize Editor 2: ${e.message}`);
+    }
+  </script>
+
+</body>
+</html>

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
   "description": "A free, open-source, privacy-first collaborative sync plugin.",
-  "author": "Antigravity",
-  "authorUrl": "",
+  "author": "Live-Cursor",
+  "authorUrl": "https://github.com/Live-Cursor",
   "isDesktopOnly": false
 }

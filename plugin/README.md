@@ -1,70 +1,77 @@
-# Obsidian Live Cursor 🚀
+# Live Cursor for Obsidian
 
-An ultra-lightweight, zero-conflict real-time collaborative editing and configuration backup engine for Obsidian. Live Cursor brings real-time Google Docs-like editing, live collaborator cursor tracking, and total vault synchronization to self-hosted markdown databases.
-
----
-
-## 🌟 Features
-
-- **Real-Time Cursor Sync**: See live cursors of other vault editors inside your notes with customizable user profiles.
-- **Dynamic Portals**: Seamlessly switch between the **User Portal** (standard real-time sync) and **Admin Portal** (server-level administration).
-- **Telemetry Admin Console**: Real-time server diagnostics reporting uptime, connected rooms, process memory footprint, and SQLite database size.
-- **Collaborator Management**: Securely register standard synchronization users directly from the Admin Dashboard.
-- **Config Sync Engine**: One-click bidirectional synchronization of themes, community plugins, and settings configuration (`.obsidian` folder).
-- **Self-Bootstrapping**: Fresh servers dynamically present a "Register/Save" workflow, locking down automatically into a secure "Login" workflow once configured.
+Live Cursor is an ultra-lightweight, zero-conflict real-time collaborative editing and configuration sync engine for Obsidian vaults. It brings real-time, conflict-free collaborative editing, live collaborator cursor tracking, and total vault synchronization to self-hosted markdown databases.
 
 ---
 
-## ⚙️ General Control Panel Configuration
+## Features
 
-You can fully control your server connections and sessions via Obsidian's built-in Settings Panel (**Settings -> Community Plugins -> Live Cursor**):
-
-### Option 1: Login Portal
-- **Admin Portal**: Connect using the server administrator credentials. When a fresh server starts, the button will dynamically read **"Save"** so you can register your initial admin credentials. Once an admin is registered, the portal locks into a secure **"Login"** prompt.
-- **User Portal**: Designed purely for standard collaborator access. Unauthenticated users cannot register accounts themselves here.
-
-### Option 2: Server Connection
-- Configure your primary backend WebSockets gateway URL (e.g. `ws://localhost:1234/sync`). This gateway supports full secure environments (`wss://`) for mobile device WebViews.
-
-### Option 3: Create Local Server
-- Click to copy a ready-to-run self-hosting script. This boots up a Dockerized WebSocket and Node.js SQLite server instantly on your local machine.
-
-### Option 4: Config Synchronization
-- Click **Sync Now** to securely sync plugins, snippets, and workspaces between instances. Perfect for keeping a desktop vault and mobile vault perfectly aligned!
+- **Real-Time Cursor Tracking**: View the live cursors and text selections of other vault editors inside your notes with custom user profiles.
+- **Background Daemon Server**: Built-in platform-independent background engine that launches with a single click inside Obsidian—no terminals or external Docker installs required.
+- **Config Sync Engine**: One-click bidirectional synchronization of settings, themes, and community plugins (your `.obsidian` configuration folder).
+- **Admin Diagnostics**: Secure telemetry dashboard reporting uptime, connected rooms, memory utilization, and local SQLite/event-log database sizes.
+- **Secure by Design**: Cryptographic verification gates all sync and administrative routes.
 
 ---
 
-## 🛠️ Advanced Developer Mode
+## Guided Setup Wizard
 
-By toggling the **Developer Mode** switch, you unlock powerful, low-level adjustments directly inside the settings tab:
+You can fully configure your server and collaborator sessions directly inside the Obsidian settings panel under the Live Cursor tab:
 
-| Setting Parameter | Description |
-| :--- | :--- |
-| **Direct Server URL** | Read/write the socket URL directly as plain text without using pop-up connection modals. |
-| **Direct Username** | Read/write the active username directly in plain text. |
-| **Direct Password** | Read/write the active credential key directly in plain text. |
-| **Workspace Identifier** | Assign a custom workspace namespace to isolate specific Vault configurations (default: `default-workspace`). |
-| **Debug Logging** | Toggle verbose console reporting to track socket states, Yjs transaction events, and WebSocket disconnect states inside developer tools. |
-| **Auto-Sync On Load** | Enable this to run configuration synchronization automatically 3 seconds after Obsidian starts, ensuring your vault is always updated. |
+1. **Start Local Background Server**: Click Launch Local Server to start the built-in background sync daemon.
+2. **Initialize Admin Account**: Provide a password to initialize your root administration credential registry.
+3. **Register Collaborator**: Enter your editor username and password. The wizard will automatically create the user account on your server and save it.
+4. **Complete and Sync**: Start editing! Collaborative cursors will appear in real time on any shared vault note.
 
 ---
 
-## 📦 Docker Backend Setup
+## Advanced Developer Mode
 
-To host your own private server on your home network or private virtual machine:
+Unlocking the Developer Mode switch in settings exposes additional, precise control parameters:
 
-1. Clone or download the backend repository.
-2. In the folder containing the `docker-compose.yml`, execute:
-   ```bash
-   docker-compose up -d
+- **Direct Server URL**: View or modify the connection socket URL directly in plain text.
+- **Direct Username**: Inspect and edit the active username.
+- **Direct Password**: Inspect and edit the current session password credential.
+- **Workspace Identifier**: Set a custom workspace namespace to isolate specific Vault configurations (defaults to `default-workspace`).
+- **Debug Logging**: Prints detailed synchronization events and websocket status reports to the Obsidian console.
+- **Auto-Sync On Load**: When enabled, runs config sync automatically 3 seconds after Obsidian starts.
+
+---
+
+## Submitting to the Obsidian Community Plugins Tab
+
+To make this plugin downloadable directly from the official Community Plugins catalog inside Obsidian, follow these steps:
+
+### 1. Build and Release
+Compile the plugin code locally:
+```bash
+npm run build
+```
+This updates `main.js` and compiles the background daemon launcher. 
+
+Create a new Release in your GitHub repository (`Live-Cursor/Live-Cursor`):
+- Name the release exactly matching your version in `manifest.json` (e.g. `1.0.0`).
+- Attach the following three compiled files as assets to the GitHub Release:
+  1. `main.js`
+  2. `manifest.json`
+  3. `styles.css`
+
+### 2. Submit to Obsidian Releases
+1. Fork the official [obsidianmd/obsidian-releases](https://github.com/obsidianmd/obsidian-releases) repository on GitHub.
+2. Edit `community-plugins.json` inside your fork and append your plugin configuration object at the end:
+   ```json
+   {
+     "id": "live-cursor",
+     "name": "Live Cursor",
+     "author": "Live-Cursor Organization",
+     "description": "Real-time collaborative editing and cursor tracking for Obsidian notes.",
+     "repo": "Live-Cursor/Live-Cursor"
+   }
    ```
-3. Your server will instantly start listening on port `1234`.
-4. Go to **Settings -> Live Cursor -> Option 1: Login** and select **Admin Portal** to configure your server.
+3. Commit the change and submit a Pull Request to the `obsidian-releases` repository. The Obsidian development team will automatically review, verify compliance, and add it to the live catalog!
 
 ---
 
-## 🔒 Security Specifications
+## License
 
-- All API routes and sync transactions are strictly validated using SHA-256 password hashing.
-- Standard collaborator registration is entirely locked behind administrator privileges inside the **Admin Console** dashboard.
-- Workspace parameters provide strong namespace isolation, preventing different collaborators from overwriting unrelated configuration sync nodes.
+This project is licensed under the MIT License.

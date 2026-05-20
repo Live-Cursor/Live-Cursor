@@ -10,6 +10,7 @@
     "module": "CommonJS",
     "target": "ES2022",
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "types": ["node", "ws"],
     // For nodejs:

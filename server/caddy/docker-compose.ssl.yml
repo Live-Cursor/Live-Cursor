@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  live-cursor-server:
+    image: ghcr.io/live-cursor/sync-server:latest
+    container_name: live-cursor-server
+    expose:
+      - "1234"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    restart: unless-stopped
+    environment:
+      - PORT=1234
+      - DB_PATH=/app/data/live-cursor.db
+      - BACKUP_DIR=/app/backups
+
+  caddy-proxy:
+    image: caddy:2-alpine
+    container_name: caddy-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SYNC_DOMAIN=${SYNC_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./logs:/var/log/caddy
+    depends_on:
+      - live-cursor-server
+
+volumes:
+  caddy_data:
+  caddy_config:

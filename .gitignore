@@ -7,6 +7,8 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
+main.js
+
 
 # Local databases and backups
 data/

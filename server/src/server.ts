@@ -58,6 +58,17 @@ setPersistence({
 });
 
 const server = http.createServer(async (request, response) => {
+  // CORS Headers
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (request.method === 'OPTIONS') {
+    response.writeHead(200);
+    response.end();
+    return;
+  }
+
   const reqUrl = url.parse(request.url!, true);
   
   if (reqUrl.pathname === '/api/admin-exists') {
@@ -68,21 +79,28 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  // Determine if this is the initial registration of the admin account when the user DB is empty
+  const isInitialSetup = storage.listUsers().length === 0 && reqUrl.pathname === '/api/admin/create-user';
+
   // Basic Auth Check for API routes
   if (reqUrl.pathname?.startsWith('/api/')) {
-    const username = reqUrl.query.user as string;
-    const password = reqUrl.query.pass as string;
-    
-    if (!username || !password) {
-      response.writeHead(401);
-      response.end('Unauthorized');
-      return;
-    }
-    const passHash = crypto.createHash('sha256').update(password).digest('hex');
-    if (!storage.verifyUser(username, passHash)) {
-      response.writeHead(403);
-      response.end('Forbidden');
-      return;
+    let username = '';
+
+    if (!isInitialSetup) {
+      username = reqUrl.query.user as string;
+      const password = reqUrl.query.pass as string;
+      
+      if (!username || !password) {
+        response.writeHead(401);
+        response.end('Unauthorized');
+        return;
+      }
+      const passHash = crypto.createHash('sha256').update(password).digest('hex');
+      if (!storage.verifyUser(username, passHash)) {
+        response.writeHead(403);
+        response.end('Forbidden');
+        return;
+      }
     }
 
     const workspace = (reqUrl.query.workspace as string) || 'default-workspace';
@@ -106,7 +124,7 @@ const server = http.createServer(async (request, response) => {
       }
 
       if (reqUrl.pathname === '/api/admin/create-user') {
-        if (username !== 'admin') {
+        if (!isInitialSetup && username !== 'admin') {
           response.writeHead(403); response.end('Forbidden'); return;
         }
         const newUser = reqUrl.query.new_user as string;
@@ -234,7 +252,7 @@ wss.on('connection', async (conn: WebSocket, req: http.IncomingMessage, docName:
   setupWSConnection(conn, req, { docName, gc: true });
 });
 
-server.listen(port, () => {
+server.listen(Number(port), '0.0.0.0', () => {
   console.log(`[Server] Live Cursor Sync Server listening on port ${port}`);
 });
 

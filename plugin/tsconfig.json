@@ -7,11 +7,10 @@
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "CommonJS",
+    "module": "ESNext",
     "target": "ES2020",
     "lib": ["DOM", "ES2020"],
-    "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "types": [],
 

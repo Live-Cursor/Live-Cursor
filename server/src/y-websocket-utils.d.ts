@@ -10,3 +10,14 @@ declare module 'y-websocket/bin/utils' {
   }): void;
   export const docs: Map<string, Y.Doc>;
 }
+
+declare module 'y-websocket' {
+  import * as Y from 'yjs';
+  export class WebsocketProvider {
+    constructor(serverUrl: string, roomName: string, doc: Y.Doc, options?: any);
+    wsconnected: boolean;
+    connect(): void;
+    disconnect(): void;
+    on(event: string, cb: Function): void;
+  }
+}

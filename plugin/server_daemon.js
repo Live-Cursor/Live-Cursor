@@ -102,13 +102,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Credentials authorization gate for Admin APIs
-  const authUser = query.user;
-  const authPass = query.pass;
-  if (!db.verifyUser(authUser, authPass)) {
-    res.writeHead(401, { 'Content-Type': 'text/plain' });
-    res.end('Unauthorized');
-    return;
+  // Determine if this is the initial registration of the admin account when the user DB is empty
+  const isInitialSetup = db.listUsers().length === 0 && url.pathname === '/api/admin/create-user';
+
+  if (!isInitialSetup) {
+    // Credentials authorization gate for Admin APIs
+    const authUser = query.user;
+    const authPass = query.pass;
+    if (!db.verifyUser(authUser, authPass)) {
+      res.writeHead(401, { 'Content-Type': 'text/plain' });
+      res.end('Unauthorized');
+      return;
+    }
   }
 
   // Create Standard User (Admin authenticated)
@@ -204,6 +209,6 @@ server.on('upgrade', (request, socket, head) => {
   });
 });
 
-server.listen(port, () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`[Daemon] Local Live Cursor sync daemon active on port ${port}`);
 });

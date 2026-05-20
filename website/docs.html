@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Developer Docs | Live Cursor Collaboration Engine</title>
+  <meta name="description" content="Technical documentation, protocol details, Tailscale networking, and self-hosting guides for the Live Cursor Obsidian collaboration plugin.">
+  <link rel="stylesheet" href="style-v3.css">
+  <link rel="icon" type="image/png" href="icon.png">
+  <script>
+    (function() {
+      const theme = localStorage.getItem('theme');
+      const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+      if (theme === 'light' || (!theme && systemPrefersLight)) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+</head>
+<body class="docs-page">
+
+  <!-- Premium Subtle ambient grid glow -->
+  <div class="bg-glow-top"></div>
+
+  <!-- Navigation bar -->
+  <nav>
+    <div class="logo-container" style="cursor: pointer;" onclick="window.location.href='index.html'">
+      <img src="icon.png" alt="Live Cursor" class="logo-img">
+      <span class="logo-text">Live Cursor</span>
+    </div>
+    <div class="nav-links">
+      <a href="index.html#features">Features</a>
+      <a href="index.html#architecture">Architecture</a>
+      <a href="docs.html" class="active" style="color: var(--text-primary);">Docs</a>
+      <a href="setup.html">Setup</a>
+      <button class="theme-toggle" aria-label="Toggle Theme">
+        <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+      <a href="https://github.com/Live-Cursor/Live-Cursor" class="btn-github" id="github-link">View on GitHub</a>
+    </div>
+
+    <!-- Mobile Hamburger Toggle -->
+    <button class="menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Navigation Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </nav>
+
+  <!-- Responsive Mobile Navigation Drawer Overlay -->
+  <div class="mobile-nav-drawer" id="mobile-nav-drawer">
+    <a href="index.html#features" class="mobile-link">Features</a>
+    <a href="index.html#architecture" class="mobile-link">Architecture</a>
+    <a href="docs.html" class="mobile-link active">Docs</a>
+    <a href="setup.html" class="mobile-link">Setup</a>
+    <div class="mobile-theme-row">
+      <span>Theme</span>
+      <button class="theme-toggle" aria-label="Toggle Theme">
+        <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
+    <a href="https://github.com/Live-Cursor/Live-Cursor" class="btn-github-mobile" id="github-link-mobile">View on GitHub</a>
+  </div>
+
+  <!-- Documentation Layout -->
+  <div class="docs-layout">
+
+    <!-- Sidebar Toggle for mobile -->
+    <button class="docs-sidebar-toggle" id="docs-sidebar-toggle" aria-label="Toggle Sidebar">
+      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      <span>Table of Contents</span>
+    </button>
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="docs-search-wrapper">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="docs-search" class="docs-search-input" placeholder="Search documentation...">
+      </div>
+
+      <nav class="docs-nav-group">
+        <span class="docs-nav-title">Getting Started</span>
+        <a href="#overview" class="docs-nav-link active" id="link-overview">Plugin Overview</a>
+        <a href="#installation" class="docs-nav-link" id="link-installation">Manual Installation</a>
+        <a href="#quickstart" class="docs-nav-link" id="link-quickstart">Vault Quickstart</a>
+      </nav>
+
+      <nav class="docs-nav-group">
+        <span class="docs-nav-title">Architecture</span>
+        <a href="#daemon-nodes" class="docs-nav-link" id="link-daemon-nodes">Daemon Infrastructure</a>
+        <a href="#network-protocol" class="docs-nav-link" id="link-network-protocol">Network Protocol</a>
+        <a href="#yjs-crdts" class="docs-nav-link" id="link-yjs-crdts">CRDT Merge Logic</a>
+      </nav>
+
+      <nav class="docs-nav-group">
+        <span class="docs-nav-title">Networking</span>
+        <a href="#tailscale" class="docs-nav-link" id="link-tailscale">Tailscale Setup</a>
+      </nav>
+
+      <nav class="docs-nav-group">
+        <span class="docs-nav-title">Support</span>
+        <a href="#faq" class="docs-nav-link" id="link-faq">Frequently Asked Questions</a>
+      </nav>
+
+      <!-- Sidebar progress indicator -->
+      <div class="docs-sidebar-footer">
+        <div class="docs-reading-progress">
+          <div class="docs-progress-bar" id="docs-progress-bar"></div>
+        </div>
+        <span class="docs-progress-label" id="docs-progress-label">0% read</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <main class="docs-content">
+
+      <!-- Section 1: Overview -->
+      <section id="overview" class="docs-section">
+        <div class="docs-section-badge">Getting Started</div>
+        <h1>Plugin Overview</h1>
+        <p>
+          <strong>Live Cursor</strong> is an advanced, offline-first, zero-cloud collaborative sync engine designed specifically for private Obsidian vaults. By leveraging Yjs conflict-free replicated data types (CRDTs) and local background daemons, it lets you edit vaults simultaneously with team members without exporting your data to third-party databases.
+        </p>
+
+        <div class="docs-alert">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            Why Zero-Cloud?
+          </h4>
+          <p>
+            Standard real-time collaborative editors require a cloud registry to sequence and resolve keystrokes. Live Cursor routes sync traffic directly between your connected clients and your own local background SQLite database daemon, maintaining absolute privacy for your intellectual property.
+          </p>
+        </div>
+
+        <h2>Key Capabilities</h2>
+        <div class="docs-feature-grid">
+          <div class="docs-feature-card">
+            <div class="docs-feature-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </div>
+            <strong>Keystroke-level Merging</strong>
+            <p>Never deal with Git line conflicts or overwriting other authors again. CRDTs merge changes deterministically at the character level.</p>
+          </div>
+          <div class="docs-feature-card">
+            <div class="docs-feature-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+            </div>
+            <strong>Metadata &amp; Settings Sync</strong>
+            <p>Dynamically propagates workspace configurations, pane positions, and custom styles across connected devices.</p>
+          </div>
+          <div class="docs-feature-card">
+            <div class="docs-feature-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"></path><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+            </div>
+            <strong>Offline Resilience</strong>
+            <p>Work fully offline; changes buffer locally in SQLite and cleanly merge upon reconnecting to the team node.</p>
+          </div>
+          <div class="docs-feature-card">
+            <div class="docs-feature-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <strong>End-to-End Private</strong>
+            <p>No data ever leaves your own network. Use wss:// for encrypted transport over your local LAN or VPN tunnel.</p>
+          </div>
+        </div>
+
+        <h2>Technology Stack</h2>
+        <div class="docs-table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Technology</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="docs-badge">Sync</span></td>
+                <td><code>Yjs</code> + <code>y-websocket</code></td>
+                <td>CRDT document state &amp; real-time broadcast</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge">Editor</span></td>
+                <td><code>y-codemirror.next</code></td>
+                <td>Collaborative cursors &amp; selections in CodeMirror 6</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge">Storage</span></td>
+                <td><code>better-sqlite3</code></td>
+                <td>Persistent document state snapshots</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge">Runtime</span></td>
+                <td><code>Node.js 20</code> / Docker Alpine</td>
+                <td>Headless daemon process</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge">Network</span></td>
+                <td>WebSocket / Tailscale</td>
+                <td>Local LAN or encrypted overlay VPN</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 2: Installation -->
+      <section id="installation" class="docs-section">
+        <div class="docs-section-badge">Getting Started</div>
+        <h1>Manual Installation</h1>
+        <p>
+          While Live Cursor is available via the Obsidian Community Plugins marketplace, you can also install it manually by following these lightweight packaging steps.
+        </p>
+
+        <h2>1. Grab Compiled Releases</h2>
+        <p>
+          Download the latest compiled release bundle from GitHub. The plugin directory requires three fundamental assets:
+        </p>
+        <ul>
+          <li><code>main.js</code> — The compiled execution logic.</li>
+          <li><code>manifest.json</code> — Metadata containing configuration permissions.</li>
+          <li><code>styles.css</code> — Custom rendering styling for peer cursors and flags.</li>
+        </ul>
+
+        <h2>2. Place Assets in Vault</h2>
+        <p>
+          Move these assets to your target vault's hidden plugin directory:
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">bash</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code># Create the target directory inside your Obsidian vault plugins folder
+mkdir -p .obsidian/plugins/live-cursor
+
+# Copy your downloaded release files into the directory
+cp main.js manifest.json styles.css .obsidian/plugins/live-cursor/</code></pre>
+        </div>
+
+        <h2>3. Reload Plugins</h2>
+        <p>
+          Navigate to <strong>Obsidian Settings &gt; Community Plugins</strong>, click <strong>Check for updates</strong>, and toggle <strong>Live Cursor</strong> to enabled.
+        </p>
+
+        <div class="docs-alert tip">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Community Marketplace Alternative
+          </h4>
+          <p>
+            Search for <strong>"Live Cursor"</strong> directly in Obsidian's Community Plugins browser. No manual file copying required — Obsidian handles asset management automatically.
+          </p>
+        </div>
+
+        <h2>Plugin Settings Reference</h2>
+        <div class="docs-table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>serverUrl</code></td>
+                <td><code>ws://localhost:1234/sync</code></td>
+                <td>WebSocket endpoint of the sync daemon</td>
+              </tr>
+              <tr>
+                <td><code>username</code></td>
+                <td>—</td>
+                <td>Collaborator login username</td>
+              </tr>
+              <tr>
+                <td><code>passwordHash</code></td>
+                <td>—</td>
+                <td>Auth credential for daemon access</td>
+              </tr>
+              <tr>
+                <td><code>nickname</code></td>
+                <td>—</td>
+                <td>Display name shown on peer cursors</td>
+              </tr>
+              <tr>
+                <td><code>cursorColor</code></td>
+                <td><code>#6366f1</code></td>
+                <td>Hex color for your cursor and selections</td>
+              </tr>
+              <tr>
+                <td><code>workspaceName</code></td>
+                <td><code>default-workspace</code></td>
+                <td>Namespace for config sync isolation</td>
+              </tr>
+              <tr>
+                <td><code>autoSyncOnLoad</code></td>
+                <td><code>false</code></td>
+                <td>Auto-trigger config sync when Obsidian starts</td>
+              </tr>
+              <tr>
+                <td><code>debugLogging</code></td>
+                <td><code>false</code></td>
+                <td>Print verbose telemetry to developer console</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 3: Vault Quickstart -->
+      <section id="quickstart" class="docs-section">
+        <div class="docs-section-badge">Getting Started</div>
+        <h1>Vault Quickstart</h1>
+        <p>
+          To synchronize vaults, a background sync database must be running. We provide an embedded sync server inside the plugin settings or a detached Docker container for remote execution.
+        </p>
+
+        <h2>Bootstrap local server in 15 seconds</h2>
+        <ol>
+          <li>Open <strong>Obsidian Settings &gt; Live Cursor</strong>.</li>
+          <li>Click the <strong>Launch Setup Wizard</strong> button inside the control panel.</li>
+          <li>Under <strong>Step 1: background server</strong>, click the switch to boot the secure local daemon process.</li>
+          <li>Under <strong>Step 2: Profile setup</strong>, type your display name and pick your cursor color banner.</li>
+          <li>You are now ready to collaborate! Share your local network address (e.g., <code>ws://192.168.1.100:1234/sync</code>) with teammates.</li>
+        </ol>
+
+        <div class="docs-alert tip">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Wizard Generator
+          </h4>
+          <p>
+            For advanced custom configurations, use our interactive <a href="setup.html" style="color: var(--accent-cyan); text-decoration: underline;">Guided Setup Wizard</a> to instantly compile Docker Compose or environment manifests.
+          </p>
+        </div>
+
+        <h2>Connecting Remote Teammates</h2>
+        <p>
+          Once your daemon is running, teammates connect by entering your server's WebSocket URL into their plugin settings. There are three network topology options:
+        </p>
+        <div class="docs-topology-cards">
+          <div class="docs-topology-card">
+            <div class="docs-topology-num">01</div>
+            <strong>Local Network (LAN)</strong>
+            <p>Fastest option. All devices must be on the same Wi-Fi or ethernet segment. Use your machine's LAN IP address.</p>
+            <code class="docs-topology-url">ws://192.168.x.x:1234/sync</code>
+          </div>
+          <div class="docs-topology-card">
+            <div class="docs-topology-num">02</div>
+            <strong>Tailscale VPN</strong>
+            <p>Best for remote teams. Tailscale creates a secure encrypted mesh between devices anywhere on the internet.</p>
+            <code class="docs-topology-url">ws://100.x.x.x:1234/sync</code>
+          </div>
+          <div class="docs-topology-card">
+            <div class="docs-topology-num">03</div>
+            <strong>Self-Hosted Server</strong>
+            <p>Deploy on a VPS, NAS, or home server using Docker. Expose via reverse proxy with HTTPS/WSS.</p>
+            <code class="docs-topology-url">wss://sync.yourdomain.com/sync</code>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Daemon Infrastructure -->
+      <section id="daemon-nodes" class="docs-section">
+        <div class="docs-section-badge">Architecture</div>
+        <h1>Daemon Infrastructure</h1>
+        <p>
+          The Live Cursor daemon process is structured in TypeScript, utilizing a low-overhead SQLite storage mechanism and a WebSocket listener to relay operations.
+        </p>
+
+        <h2>Docker Container Deployment</h2>
+        <p>
+          If you prefer a headless server running on a NAS, server, or cloud node, deploy the precompiled Alpine Docker container.
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">docker</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code># Deploy the Docker container on port 1234
+docker run -d \
+  --name live-cursor-daemon \
+  -p 1234:1234 \
+  -v /volume1/obsidian/data:/app/data \
+  -v /volume1/obsidian/backups:/app/backups \
+  -e PORT=1234 \
+  -e DB_PATH=/app/data/live-cursor.db \
+  live-cursor/daemon:latest</code></pre>
+        </div>
+
+        <h2>Docker Compose (Recommended)</h2>
+        <p>
+          For persistent, auto-restarting deployments, use the official Compose manifest:
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">yaml</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code>version: '3.8'
+services:
+  live-cursor:
+    image: ghcr.io/live-cursor/sync-server:latest
+    container_name: live-cursor-server
+    restart: unless-stopped
+    ports:
+      - "1234:1234"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    environment:
+      - PORT=1234
+      - ADMIN_USER=admin
+      - ADMIN_PASS=yourpassword</code></pre>
+        </div>
+
+        <h2>Environment Parameters</h2>
+        <p>
+          The daemon respects standard environmental variables for easy tailoring:
+        </p>
+        <div class="docs-table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>PORT</code></td>
+                <td><code>1234</code></td>
+                <td>WebSocket listener port</td>
+              </tr>
+              <tr>
+                <td><code>DB_PATH</code></td>
+                <td><code>/app/data/live-cursor.db</code></td>
+                <td>Absolute path to SQLite state file</td>
+              </tr>
+              <tr>
+                <td><code>BACKUP_DIR</code></td>
+                <td><code>/app/backups</code></td>
+                <td>Directory for Markdown flush backups</td>
+              </tr>
+              <tr>
+                <td><code>ADMIN_USER</code></td>
+                <td><code>admin</code></td>
+                <td>Admin account username</td>
+              </tr>
+              <tr>
+                <td><code>ADMIN_PASS</code></td>
+                <td>—</td>
+                <td>Admin account password (required)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="docs-alert">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Security Notice
+          </h4>
+          <p>
+            Never expose port <code>1234</code> directly to the public internet without placing it behind a reverse proxy (e.g., Caddy or Nginx) with TLS termination. Use Tailscale for zero-config encrypted remote access instead.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section 5: Network Protocol -->
+      <section id="network-protocol" class="docs-section">
+        <div class="docs-section-badge">Architecture</div>
+        <h1>Network Protocol</h1>
+        <p>
+          Communication between Obsidian clients and the local sync daemon occurs over binary WebSockets utilizing custom packaging structures derived from the Yjs protocols.
+        </p>
+
+        <h2>Operational Packets</h2>
+        <p>
+          Packets are framed with a single-byte prefix indicating message type. The payload consists of standard <code>Uint8Array</code> binary frames.
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">json</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code>{
+  "message_types": {
+    "0": "SyncStep1 (Client sends their local state vector)",
+    "1": "SyncStep2 (Daemon replies with missing updates)",
+    "2": "SyncUpdate (Real-time delta keystrokes and selections)",
+    "3": "AuthRequest (Daemon challenges client validation signature)"
+  }
+}</code></pre>
+        </div>
+
+        <h2>Connection Lifecycle</h2>
+        <div class="docs-table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th>Direction</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="docs-badge indigo">Handshake</span></td>
+                <td>Client → Daemon</td>
+                <td>WebSocket upgrade with <code>user</code> &amp; <code>pass</code> URL params</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge cyan">SyncStep1</span></td>
+                <td>Client → Daemon</td>
+                <td>Client sends its current Yjs state vector</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge cyan">SyncStep2</span></td>
+                <td>Daemon → Client</td>
+                <td>Daemon replies with all missing document updates</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge green">Live Sync</span></td>
+                <td>Bidirectional</td>
+                <td>Real-time delta keystrokes and awareness states</td>
+              </tr>
+              <tr>
+                <td><span class="docs-badge muted">Reconnect</span></td>
+                <td>Client</td>
+                <td>Auto-reconnects on mobile wake, network resume, window focus</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>Lazy Flush Interval</h2>
+        <p>
+          To maintain standard vault format compatibility, the daemon doesn't just store edits in SQLite. Every 15 seconds of idle inactivity, it flushes the parsed, compiled Markdown buffer directly back to a human-readable <code>.md</code> file in your backups directory.
+        </p>
+      </section>
+
+      <!-- Section 6: Yjs CRDT Details -->
+      <section id="yjs-crdts" class="docs-section">
+        <div class="docs-section-badge">Architecture</div>
+        <h1>CRDT Merge Logic</h1>
+        <p>
+          Conflict-free Replicated Data Types (CRDTs) form the mathematical foundation of Live Cursor's concurrent editing capability.
+        </p>
+
+        <h2>Why git diffs fail real-time edit resolution</h2>
+        <p>
+          Git utilizes line-based three-way merges. If two authors edit different portions of the exact same line at the same time, Git is unable to resolve order, prompting a merge conflict.
+        </p>
+        <p>
+          <strong>Yjs</strong> manages text as a doubly linked list of character chunks. Each chunk contains:
+        </p>
+        <ul>
+          <li><strong>ID</strong>: A unique key containing the author's client code and an incremental sequence number.</li>
+          <li><strong>Origin Left / Origin Right</strong>: Pointers targeting the adjacent characters at the time the keystroke was pressed.</li>
+        </ul>
+        <p>
+          This guarantees that even if 10 people type concurrently inside the same paragraph, all keystrokes are merged in exactly the same deterministic order across every single peer.
+        </p>
+
+        <h2>Awareness Protocol</h2>
+        <p>
+          Alongside document sync, Live Cursor propagates real-time <strong>awareness state</strong> — lightweight JSON objects broadcasting each peer's cursor position, selection range, and collaborator name. Awareness updates are never persisted to SQLite; they are ephemeral and discarded when a client disconnects.
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">typescript</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code>// Live Cursor sets collaborator awareness on each file sync
+provider.awareness.setLocalStateField('user', {
+  name: settings.nickname || settings.username || 'Collaborator',
+  color: settings.cursorColor || '#6366f1',
+  colorLight: (settings.cursorColor || '#6366f1') + '33'
+});</code></pre>
+        </div>
+
+        <div class="docs-alert tip">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            Performance Characteristic
+          </h4>
+          <p>
+            Yjs CRDT updates are binary-encoded using lib0 encoding, keeping delta sizes extremely small — typically under 50 bytes per keystroke even in complex collaborative sessions.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section 7: Tailscale Setup -->
+      <section id="tailscale" class="docs-section">
+        <div class="docs-section-badge">Networking</div>
+        <h1>Tailscale Setup</h1>
+        <p>
+          Tailscale is the recommended networking solution for sharing your Live Cursor daemon with remote teammates. It creates an encrypted peer-to-peer mesh network (using WireGuard® under the hood) where every device gets a stable private IP address — no port forwarding, no firewall rules, no dynamic DNS needed.
+        </p>
+
+        <div class="docs-alert">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            Zero-Config Encrypted Networking
+          </h4>
+          <p>
+            Tailscale handles NAT traversal, encryption, and authentication automatically. Once installed, every device on your tailnet can reach your Live Cursor daemon as if it were on the same local network.
+          </p>
+        </div>
+
+        <h2>Step 1 — Install Tailscale on the Host Machine</h2>
+        <p>
+          The <strong>host machine</strong> is the device running the Live Cursor daemon (local background process or Docker container). Install Tailscale on this machine first.
+        </p>
+
+        <div class="docs-code-tabs">
+          <div class="docs-code-tab-bar">
+            <button class="docs-code-tab-btn active" onclick="switchCodeTab(this, 'ts-linux')">Linux / NAS</button>
+            <button class="docs-code-tab-btn" onclick="switchCodeTab(this, 'ts-mac')">macOS</button>
+            <button class="docs-code-tab-btn" onclick="switchCodeTab(this, 'ts-windows')">Windows</button>
+            <button class="docs-code-tab-btn" onclick="switchCodeTab(this, 'ts-docker')">Docker</button>
+          </div>
+
+          <div id="ts-linux" class="docs-code-tab-content active">
+            <div class="docs-code-container" style="margin-top: 0; border-top: none; border-radius: 0 0 6px 6px;">
+              <div class="docs-code-header">
+                <span class="docs-code-lang">bash</span>
+                <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>Copy</span>
+                </button>
+              </div>
+              <pre><code># Install Tailscale on Debian/Ubuntu
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Authenticate and connect to your tailnet
+sudo tailscale up
+
+# Confirm your Tailscale IP (100.x.x.x range)
+tailscale ip -4</code></pre>
+            </div>
+          </div>
+
+          <div id="ts-mac" class="docs-code-tab-content">
+            <div class="docs-code-container" style="margin-top: 0; border-top: none; border-radius: 0 0 6px 6px;">
+              <div class="docs-code-header">
+                <span class="docs-code-lang">bash</span>
+                <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>Copy</span>
+                </button>
+              </div>
+              <pre><code># Install via Homebrew
+brew install tailscale
+
+# Start and authenticate
+sudo tailscaled &
+tailscale up
+
+# Or download the App from the Mac App Store (recommended)
+# https://apps.apple.com/app/tailscale/id1475387142</code></pre>
+            </div>
+          </div>
+
+          <div id="ts-windows" class="docs-code-tab-content">
+            <div class="docs-code-container" style="margin-top: 0; border-top: none; border-radius: 0 0 6px 6px;">
+              <div class="docs-code-header">
+                <span class="docs-code-lang">powershell</span>
+                <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>Copy</span>
+                </button>
+              </div>
+              <pre><code># Download installer from https://tailscale.com/download/windows
+# Or install via winget:
+winget install tailscale.tailscale
+
+# After installation, sign in from the system tray icon
+# Confirm your Tailscale IP
+tailscale ip -4</code></pre>
+            </div>
+          </div>
+
+          <div id="ts-docker" class="docs-code-tab-content">
+            <div class="docs-code-container" style="margin-top: 0; border-top: none; border-radius: 0 0 6px 6px;">
+              <div class="docs-code-header">
+                <span class="docs-code-lang">yaml</span>
+                <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+                  <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>Copy</span>
+                </button>
+              </div>
+              <pre><code># docker-compose.yml — Live Cursor + Tailscale sidecar
+version: '3.8'
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: live-cursor-node
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  live-cursor:
+    image: ghcr.io/live-cursor/sync-server:latest
+    network_mode: "service:tailscale"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    environment:
+      - PORT=1234
+      - ADMIN_USER=admin
+      - ADMIN_PASS=yourpassword
+    restart: unless-stopped
+    depends_on:
+      - tailscale
+
+volumes:
+  tailscale-state:</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h2>Step 2 — Install Tailscale on Teammate Devices</h2>
+        <p>
+          Each collaborator installs Tailscale on their device and joins your <strong>tailnet</strong> (Tailscale network). You can invite them via email from the <a href="https://login.tailscale.com/admin" style="color: var(--accent-cyan); text-decoration: underline;" target="_blank">Tailscale admin console</a>.
+        </p>
+        <ul>
+          <li>Download from <a href="https://tailscale.com/download" style="color: var(--accent-cyan); text-decoration: underline;" target="_blank">tailscale.com/download</a> for all platforms including iOS and Android.</li>
+          <li>Once connected, every device sees others via stable <code>100.x.x.x</code> IPs — these never change.</li>
+          <li>For Obsidian mobile users, Tailscale runs in the background and maintains the VPN tunnel automatically.</li>
+        </ul>
+
+        <h2>Step 3 — Configure Live Cursor to Use Tailscale IP</h2>
+        <p>
+          Once Tailscale is running on all devices, update the Live Cursor server URL to point to the host machine's Tailscale IP instead of its local LAN address:
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">settings</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code># In Obsidian → Settings → Live Cursor → Server URL
+# Replace with the host machine's Tailscale IP:
+
+ws://100.x.x.x:1234/sync
+
+# Example with a specific IP:
+ws://100.64.0.12:1234/sync
+
+# To find the host's Tailscale IP, run on the host machine:
+tailscale ip -4</code></pre>
+        </div>
+
+        <h2>Step 4 — Using MagicDNS (Optional but Recommended)</h2>
+        <p>
+          Tailscale's <strong>MagicDNS</strong> feature assigns human-readable hostnames to every device on your tailnet, so you never need to remember IP addresses.
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">settings</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code># Enable MagicDNS in the Tailscale Admin Console:
+# https://login.tailscale.com/admin/dns
+
+# Then use the hostname instead of IP in Live Cursor:
+ws://my-desktop.tail12345.ts.net:1234/sync
+
+# Or if you set a custom domain:
+ws://live-cursor-node:1234/sync</code></pre>
+        </div>
+
+        <h2>Network Topology with Tailscale</h2>
+        <div class="docs-topology-diagram">
+          <div class="docs-topo-node host">
+            <div class="docs-topo-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
+            <strong>Host Machine</strong>
+            <span>Running daemon + Tailscale</span>
+            <code>100.64.0.1</code>
+          </div>
+          <div class="docs-topo-lines">
+            <div class="docs-topo-line"></div>
+            <div class="docs-topo-label">WireGuard® encrypted tunnel</div>
+          </div>
+          <div class="docs-topo-peers">
+            <div class="docs-topo-node peer">
+              <div class="docs-topo-icon cyan">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+              </div>
+              <strong>Teammate A</strong>
+              <span>Obsidian on MacBook</span>
+              <code>100.64.0.2</code>
+            </div>
+            <div class="docs-topo-node peer">
+              <div class="docs-topo-icon cyan">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+              </div>
+              <strong>Teammate B</strong>
+              <span>Obsidian on iPhone</span>
+              <code>100.64.0.3</code>
+            </div>
+            <div class="docs-topo-node peer">
+              <div class="docs-topo-icon cyan">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              </div>
+              <strong>Teammate C</strong>
+              <span>Obsidian on Windows PC</span>
+              <code>100.64.0.4</code>
+            </div>
+          </div>
+        </div>
+
+        <h2>Tailscale ACL — Restricting Access</h2>
+        <p>
+          For organizations, you can restrict which Tailscale devices can reach your Live Cursor daemon using <strong>Access Control Lists (ACLs)</strong> in the admin panel.
+        </p>
+
+        <div class="docs-code-container">
+          <div class="docs-code-header">
+            <span class="docs-code-lang">json — tailscale acl</span>
+            <button class="docs-code-copy-btn" onclick="copySnippet(this)">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code>{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:obsidian-collab"],
+      "dst": ["tag:live-cursor-server:1234"]
+    }
+  ],
+  "tagOwners": {
+    "tag:obsidian-collab": ["autogroup:member"],
+    "tag:live-cursor-server": ["autogroup:admin"]
+  }
+}</code></pre>
+        </div>
+
+        <div class="docs-alert tip">
+          <h4>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.64 1.11h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.19a16 16 0 0 0 5.99 5.99l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.91 16.92z"></path></svg>
+            Tailscale Free Tier
+          </h4>
+          <p>
+            Tailscale's free personal plan supports up to <strong>3 users and 100 devices</strong> — more than enough for most small collaboration teams. Larger organizations can upgrade to a team plan at tailscale.com.
+          </p>
+        </div>
+
+        <h2>Troubleshooting Tailscale Connectivity</h2>
+        <div class="docs-table-wrapper">
+          <table class="docs-table">
+            <thead>
+              <tr>
+                <th>Symptom</th>
+                <th>Likely Cause</th>
+                <th>Fix</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Cannot connect to <code>ws://100.x.x.x:1234</code></td>
+                <td>Tailscale not running on host</td>
+                <td>Run <code>sudo tailscale up</code> on the host machine</td>
+              </tr>
+              <tr>
+                <td>Connection timeout after a few minutes</td>
+                <td>Host machine sleep/hibernate</td>
+                <td>Disable sleep on the host or use a Docker server on a NAS</td>
+              </tr>
+              <tr>
+                <td>Mobile Obsidian disconnects frequently</td>
+                <td>iOS/Android background process limits</td>
+                <td>Enable "Always-on VPN" in Tailscale mobile settings</td>
+              </tr>
+              <tr>
+                <td>MagicDNS hostname not resolving</td>
+                <td>MagicDNS not enabled in admin console</td>
+                <td>Enable at <code>login.tailscale.com/admin/dns</code></td>
+              </tr>
+              <tr>
+                <td>High latency despite short distances</td>
+                <td>Using DERP relay instead of direct connection</td>
+                <td>Ensure UDP port 41641 is open; Tailscale prefers direct P2P</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 8: FAQ -->
+      <section id="faq" class="docs-section">
+        <div class="docs-section-badge">Support</div>
+        <h1>Frequently Asked Questions</h1>
+
+        <div class="docs-faq-list">
+          <details class="docs-faq-item" open>
+            <summary class="docs-faq-question">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              Is my vault data completely encrypted?
+            </summary>
+            <div class="docs-faq-answer">
+              <p>
+                Yes. Direct connections between Obsidian and local sync daemons can be established using secure WebSockets (<code>wss://</code>). Data never transits through public routers, remaining locked within your own sandboxed network perimeter. When using Tailscale, traffic is additionally encrypted with WireGuard®-grade encryption at the network layer.
+              </p>
+            </div>
+          </details>
+
+          <details class="docs-faq-item">
+            <summary class="docs-faq-question">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              What happens if I edit offline?
+            </summary>
+            <div class="docs-faq-answer">
+              <p>
+                Live Cursor queues operational transactions locally within your device memory. The moment a client regains connectivity to your sync server, the vectors are exchanged and overlapping edits are resolved effortlessly using CRDT merge semantics — no manual conflict resolution required.
+              </p>
+            </div>
+          </details>
+
+          <details class="docs-faq-item">
+            <summary class="docs-faq-question">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              Does this increase the size of my Markdown files?
+            </summary>
+            <div class="docs-faq-answer">
+              <p>
+                No. The operational histories and cursor tags are recorded in a separate SQLite database file. Your Markdown vault notes remain fully standard, clean, and free of any bloating tracking markers.
+              </p>
+            </div>
+          </details>
+
+          <details class="docs-faq-item">
+            <summary class="docs-faq-question">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              Can I use Live Cursor on mobile (iOS / Android)?
+            </summary>
+            <div class="docs-faq-answer">
+              <p>
+                Yes! The plugin is fully supported on Obsidian mobile. Live Cursor automatically reconnects whenever the app becomes visible or the network comes back online. For remote access on mobile, pair it with the Tailscale mobile app for reliable encrypted connectivity from anywhere.
+              </p>
+            </div>
+          </details>
+
+          <details class="docs-faq-item">
+            <summary class="docs-faq-question">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              How many users can collaborate simultaneously?
+            </summary>
+            <div class="docs-faq-answer">
+              <p>
+                There is no hard user limit built into Live Cursor. Practical limits depend on the host machine's resources. The SQLite daemon is single-threaded but uses async I/O, comfortably handling 10–20 concurrent editors on modest hardware. The Docker deployment on a NAS or small VPS handles even more.
+              </p>
+            </div>
+          </details>
+
+          <details class="docs-faq-item">
+            <summary class="docs-faq-question">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              Do I need Tailscale, or can I use my own VPN?
+            </summary>
+            <div class="docs-faq-answer">
+              <p>
+                Tailscale is recommended for its zero-config simplicity, but any VPN solution that provides IP-level routing between devices works. This includes WireGuard, OpenVPN, ZeroTier, or a traditional site-to-site VPN. As long as the WebSocket URL is reachable, Live Cursor will connect.
+              </p>
+            </div>
+          </details>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Footer Section -->
+  <footer>
+    <div class="footer-logo">
+      <img src="icon.png" alt="Live Cursor" class="logo-img">
+      <span>Live Cursor</span>
+    </div>
+    <p class="footer-desc">A beautiful, self-hosted, privacy-first real-time collaborative workspace for your Obsidian vaults.</p>
+    <a href="https://github.com/Live-Cursor/Live-Cursor" class="btn-primary">Get Core Engine</a>
+    <p class="copyright">Released under the MIT License. Built with Obsidian API and Yjs CRDT structures.</p>
+  </footer>
+
+  <!-- Search, Copy, Scroll Spy and Tailscale tab scripts -->
+  <script src="app.js"></script>
+  <script>
+    // --- DOCS SIDEBAR MOBILE TOGGLE ---
+    const sidebarToggle = document.getElementById('docs-sidebar-toggle');
+    const sidebar = document.getElementById('docs-sidebar');
+    if (sidebarToggle && sidebar) {
+      sidebarToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        sidebarToggle.classList.toggle('open');
+      });
+    }
+
+    // --- SCROLL SPY: Update active link based on scroll position ---
+    const sections = document.querySelectorAll('.docs-section');
+    const navLinks = document.querySelectorAll('.docs-nav-link');
+    const progressBar = document.getElementById('docs-progress-bar');
+    const progressLabel = document.getElementById('docs-progress-label');
+
+    function updateScrollSpy() {
+      const scrollY = window.scrollY + 120;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = Math.min(100, Math.round((window.scrollY / docHeight) * 100));
+
+      if (progressBar) progressBar.style.width = progress + '%';
+      if (progressLabel) progressLabel.textContent = progress + '% read';
+
+      let activeId = null;
+      sections.forEach(section => {
+        if (section.offsetTop <= scrollY) {
+          activeId = section.id;
+        }
+      });
+
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + activeId) {
+          link.classList.add('active');
+        }
+      });
+    }
+
+    window.addEventListener('scroll', updateScrollSpy, { passive: true });
+    updateScrollSpy();
+
+    // --- TAILSCALE CODE TABS ---
+    window.switchCodeTab = function(btn, tabId) {
+      const tabBar = btn.closest('.docs-code-tabs');
+      tabBar.querySelectorAll('.docs-code-tab-btn').forEach(b => b.classList.remove('active'));
+      tabBar.querySelectorAll('.docs-code-tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(tabId)?.classList.add('active');
+    };
+  </script>
+</body>
+</html>

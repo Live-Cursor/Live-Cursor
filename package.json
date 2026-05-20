@@ -1,0 +1,13 @@
+{
+  "name": "live-cursor-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live Cursor Workspace",
+  "scripts": {
+    "build": "npm run build --prefix plugin",
+    "build:plugin": "npm run build --prefix plugin",
+    "dev:plugin": "npm run dev --prefix plugin",
+    "start:server": "npm start --prefix server",
+    "test:server": "npm test --prefix server"
+  }
+}

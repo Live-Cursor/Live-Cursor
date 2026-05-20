@@ -934,6 +934,19 @@ class SetupWizardModal extends Modal {
                 this.renderStep();
               }
             }));
+
+        const isRemote = this.plugin.settings.serverUrl && !this.plugin.settings.serverUrl.includes('localhost') && !this.plugin.settings.serverUrl.includes('127.0.0.1');
+
+        new Setting(card)
+          .setName('Using a remote/Docker server?')
+          .setDesc(`Current configured server: ${this.plugin.settings.serverUrl || 'None'}`)
+          .addButton(btn => btn
+            .setButtonText(isRemote ? 'Use Remote Server (Next Step)' : 'Proceed with Remote/Docker Server')
+            .setCta()
+            .onClick(() => {
+              this.step = 2;
+              this.renderStep();
+            }));
       }
     }
 
@@ -964,11 +977,13 @@ class SetupWizardModal extends Modal {
               return;
             }
             try {
-              // 1. Point local server URL dynamically to port 1234
-              this.plugin.settings.serverUrl = 'ws://localhost:1234/sync';
+              // 1. Point local server URL dynamically to port 1234 if not already configured to a remote server
+              if (!this.plugin.settings.serverUrl || this.plugin.settings.serverUrl.includes('localhost') || this.plugin.settings.serverUrl.includes('127.0.0.1')) {
+                this.plugin.settings.serverUrl = 'ws://localhost:1234/sync';
+              }
               
-              // 2. HTTP call to register admin on the freshly spawned server
-              const httpUrl = 'http://localhost:1234';
+              // 2. HTTP call to register admin on the freshly spawned/configured server
+              const httpUrl = this.plugin.settings.serverUrl.replace(/^ws/, 'http').replace(/\/sync\/?$/, '');
               const registerUrl = `${httpUrl}/api/admin/create-user?user=admin&pass=${encodeURIComponent(this.adminPass)}&new_user=admin&new_pass=${encodeURIComponent(this.adminPass)}`;
               
               const res = await requestUrl({ url: registerUrl, method: 'POST' });
@@ -985,7 +1000,7 @@ class SetupWizardModal extends Modal {
                 new Notice(`Registry failed: ${res.text}`);
               }
             } catch (err: any) {
-              new Notice(`Failed to connect to local server: ${err.message}`);
+              new Notice(`Failed to connect to server: ${err.message}`);
             }
           }));
     }
@@ -1018,8 +1033,8 @@ class SetupWizardModal extends Modal {
               return;
             }
             try {
-              // Call local server as admin to register the standard user
-              const httpUrl = 'http://localhost:1234';
+              // Call server dynamically as admin to register the standard user
+              const httpUrl = this.plugin.settings.serverUrl.replace(/^ws/, 'http').replace(/\/sync\/?$/, '');
               const adminPass = this.plugin.settings.passwordHash;
               const createUserUrl = `${httpUrl}/api/admin/create-user?user=admin&pass=${encodeURIComponent(adminPass)}&new_user=${encodeURIComponent(this.userText)}&new_pass=${encodeURIComponent(this.userPass)}`;
               
@@ -1045,10 +1060,10 @@ class SetupWizardModal extends Modal {
 
     else if (this.step === 4) {
       card.createEl('h3', { text: 'Setup Complete!' });
-      card.createEl('p', { text: 'Everything has been automatically configured. Your local background sync server is active, credentials have been saved, and live collaborative editing is armed!' });
+      card.createEl('p', { text: 'Everything has been automatically configured. Your sync server is active, credentials have been saved, and live collaborative editing is armed!' });
 
       const detailList = card.createEl('ul');
-      detailList.createEl('li', { text: 'Server: ws://localhost:1234/sync' });
+      detailList.createEl('li', { text: `Server: ${this.plugin.settings.serverUrl}` });
       detailList.createEl('li', { text: `Active Profile: ${this.plugin.settings.username}` });
       detailList.createEl('li', { text: 'Collaborator Cursor Color: Active' });
 

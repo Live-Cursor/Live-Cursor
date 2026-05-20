@@ -9892,143 +9892,92 @@ var SetupWizardModal = class extends import_obsidian2.Modal {
     super(app);
     this.plugin = plugin;
     this.tab = tab;
-    this.step = 1;
-    // Form states
-    this.adminPass = "";
     this.userText = "";
     this.userPass = "";
+    this.serverUrl = "";
+    this.userText = this.plugin.settings.username || "";
+    this.userPass = this.plugin.settings.passwordHash || "";
+    this.serverUrl = this.plugin.settings.serverUrl || "ws://localhost:1234/sync";
   }
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "Live Cursor Guided Setup Wizard" });
-    this.stepContainer = contentEl.createEl("div");
-    this.renderStep();
-  }
-  renderStep() {
-    this.stepContainer.empty();
-    const progress = this.stepContainer.createEl("div");
-    progress.style.display = "flex";
-    progress.style.justifyContent = "space-between";
-    progress.style.marginBottom = "25px";
-    progress.style.fontWeight = "bold";
-    progress.style.fontSize = "12px";
-    const steps = ["1. Launch Server", "2. Create Admin", "3. Create Collaborator", "4. Complete!"];
-    steps.forEach((name, idx) => {
-      const stepEl = progress.createEl("div", { text: name });
-      if (idx + 1 === this.step) {
-        stepEl.style.color = "var(--text-accent)";
-      } else if (idx + 1 < this.step) {
-        stepEl.style.color = "var(--color-green)";
-        stepEl.style.textDecoration = "line-through";
-      } else {
-        stepEl.style.color = "var(--text-muted)";
-      }
-    });
-    const card = this.stepContainer.createEl("div");
+    contentEl.createEl("h2", { text: "Live Cursor Onboarding Setup" });
+    contentEl.createEl("p", { text: "Connect your device and start collaborating instantly. If this is a fresh setup, the username and password you enter will automatically be registered as your main credentials." });
+    const card = contentEl.createEl("div");
     card.style.background = "var(--background-secondary)";
     card.style.border = "1px solid var(--border-color)";
     card.style.borderRadius = "6px";
     card.style.padding = "20px";
     card.style.marginBottom = "20px";
-    if (this.step === 1) {
-      card.createEl("h3", { text: "Step 1: Start your Private Sync Server" });
-      card.createEl("p", { text: "Obsidian Live Cursor has a built-in background engine daemon. Click below to launch your secure, sandboxed local sync database process." });
-      if (this.plugin.daemonProcess) {
-        const okText = card.createEl("p", { text: "Success! Server is running in the background." });
-        okText.style.color = "var(--color-green)";
-        okText.style.fontWeight = "bold";
-        new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Next Step").setCta().onClick(() => {
-          this.step = 2;
-          this.renderStep();
-        }));
-      } else {
-        new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Launch Local Server").setCta().onClick(async () => {
-          const ok = await this.plugin.startDaemon();
-          if (ok) {
-            new import_obsidian2.Notice("Local sync daemon launched successfully!");
-            this.renderStep();
-          }
-        }));
-        const isRemote = this.plugin.settings.serverUrl && !this.plugin.settings.serverUrl.includes("localhost") && !this.plugin.settings.serverUrl.includes("127.0.0.1");
-        new import_obsidian2.Setting(card).setName("Using a remote/Docker server?").setDesc(`Current configured server: ${this.plugin.settings.serverUrl || "None"}`).addButton((btn) => btn.setButtonText(isRemote ? "Use Remote Server (Next Step)" : "Proceed with Remote/Docker Server").setCta().onClick(() => {
-          this.step = 2;
-          this.renderStep();
-        }));
+    new import_obsidian2.Setting(card).setName("Sync Username").setDesc("Enter your sync profile username").addText((text2) => text2.setPlaceholder("e.g. Alice").setValue(this.userText).onChange((v) => this.userText = v));
+    new import_obsidian2.Setting(card).setName("Sync Password").setDesc("Enter your profile security password").addText((text2) => text2.setPlaceholder("Enter secure password").setValue(this.userPass).onChange((v) => this.userPass = v));
+    new import_obsidian2.Setting(card).setName("Sync Server URL").setDesc("Local database background daemon or remote Tailscale host URL").addText((text2) => text2.setPlaceholder("ws://localhost:1234/sync").setValue(this.serverUrl).onChange((v) => this.serverUrl = v));
+    const buttonContainer = contentEl.createEl("div");
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.justifyContent = "flex-end";
+    buttonContainer.style.marginTop = "15px";
+    new import_obsidian2.Setting(buttonContainer).addButton((btn) => btn.setButtonText("Connect & Start Syncing!").setCta().onClick(async () => {
+      if (!this.userText || !this.userPass) {
+        new import_obsidian2.Notice("Please fill in both username and password.");
+        return;
       }
-    } else if (this.step === 2) {
-      card.createEl("h3", { text: "Step 2: Initialize Server Admin Panel" });
-      card.createEl("p", { text: "Create a password for your root admin registry account. This lets you securely monitor connections, inspect active sync documents, and invite standard collaborator accounts." });
-      new import_obsidian2.Setting(card).setName("Admin Username").addText((text2) => text2.setValue("admin").setDisabled(true));
-      new import_obsidian2.Setting(card).setName("Admin Password").addText((text2) => text2.setPlaceholder("Enter secure admin password").setValue(this.adminPass).onChange((v) => this.adminPass = v));
-      new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Initialize Admin Registry").setCta().onClick(async () => {
-        if (!this.adminPass) {
-          new import_obsidian2.Notice("Please set a password for the admin account.");
-          return;
+      let targetUrl = this.serverUrl.trim();
+      if (!targetUrl) {
+        targetUrl = "ws://localhost:1234/sync";
+      }
+      if (!targetUrl.startsWith("ws://") && !targetUrl.startsWith("wss://")) {
+        targetUrl = `ws://${targetUrl}`;
+      }
+      if (!targetUrl.endsWith("/sync") && !targetUrl.includes("/sync/")) {
+        targetUrl = targetUrl.replace(/\/+$/, "") + "/sync";
+      }
+      this.plugin.settings.serverUrl = targetUrl;
+      await this.plugin.saveSettings();
+      new import_obsidian2.Notice("Initializing sync environment...");
+      const isLocal = targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1");
+      if (isLocal && !this.plugin.daemonProcess) {
+        const launched = await this.plugin.startDaemon();
+        if (launched) {
+          new import_obsidian2.Notice("Local background sync daemon launched!");
         }
+      }
+      try {
+        const httpUrl = targetUrl.replace(/^ws/, "http").replace(/\/sync\/?$/, "");
+        const checkUrl = `${httpUrl}/api/admin-exists`;
+        let userExists = false;
         try {
-          if (!this.plugin.settings.serverUrl || this.plugin.settings.serverUrl.includes("localhost") || this.plugin.settings.serverUrl.includes("127.0.0.1")) {
-            this.plugin.settings.serverUrl = "ws://localhost:1234/sync";
+          const checkRes = await (0, import_obsidian2.requestUrl)({ url: checkUrl, method: "GET" });
+          if (checkRes.status === 200) {
+            const body = checkRes.json;
+            userExists = body.exists;
           }
-          const httpUrl = this.plugin.settings.serverUrl.replace(/^ws/, "http").replace(/\/sync\/?$/, "");
-          const registerUrl = `${httpUrl}/api/admin/create-user?user=admin&pass=${encodeURIComponent(this.adminPass)}&new_user=admin&new_pass=${encodeURIComponent(this.adminPass)}`;
-          const res = await (0, import_obsidian2.requestUrl)({ url: registerUrl, method: "POST" });
-          if (res.status === 200) {
-            this.plugin.settings.username = "admin";
-            this.plugin.settings.passwordHash = this.adminPass;
-            await this.plugin.saveSettings();
-            new import_obsidian2.Notice("Root Admin Registry successfully configured!");
-            this.step = 3;
-            this.renderStep();
-          } else {
-            new import_obsidian2.Notice(`Registry failed: ${res.text}`);
+        } catch (e) {
+          console.log("Admin check failed, database might be empty or uninitialized:", e);
+        }
+        if (!userExists) {
+          const registerUrl = `${httpUrl}/api/admin/create-user?user=${encodeURIComponent(this.userText)}&pass=${encodeURIComponent(this.userPass)}&new_user=${encodeURIComponent(this.userText)}&new_pass=${encodeURIComponent(this.userPass)}`;
+          const regRes = await (0, import_obsidian2.requestUrl)({ url: registerUrl, method: "POST" });
+          if (regRes.status === 200) {
+            new import_obsidian2.Notice("Primary Sync Credentials configured!");
           }
-        } catch (err) {
-          new import_obsidian2.Notice(`Failed to connect to server: ${err.message}`);
         }
-      }));
-    } else if (this.step === 3) {
-      card.createEl("h3", { text: "Step 3: Create Collaborator Profile" });
-      card.createEl("p", { text: "Create your main editor collaborator account! The wizard will automatically register it on your server, save the credentials, and hook up live editor sync." });
-      new import_obsidian2.Setting(card).setName("Collaborator Username").addText((text2) => text2.setPlaceholder("e.g. Alice").setValue(this.userText).onChange((v) => this.userText = v));
-      new import_obsidian2.Setting(card).setName("Collaborator Password").addText((text2) => text2.setPlaceholder("Enter password").setValue(this.userPass).onChange((v) => this.userPass = v));
-      new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Create User & Start Syncing").setCta().onClick(async () => {
-        if (!this.userText || !this.userPass) {
-          new import_obsidian2.Notice("Please fill in both fields.");
-          return;
-        }
-        try {
-          const httpUrl = this.plugin.settings.serverUrl.replace(/^ws/, "http").replace(/\/sync\/?$/, "");
-          const adminPass = this.plugin.settings.passwordHash;
-          const createUserUrl = `${httpUrl}/api/admin/create-user?user=admin&pass=${encodeURIComponent(adminPass)}&new_user=${encodeURIComponent(this.userText)}&new_pass=${encodeURIComponent(this.userPass)}`;
-          const res = await (0, import_obsidian2.requestUrl)({ url: createUserUrl, method: "POST" });
-          if (res.status === 200) {
-            this.plugin.settings.username = this.userText;
-            this.plugin.settings.passwordHash = this.userPass;
-            this.plugin.settings.nickname = this.userText;
-            await this.plugin.saveSettings();
-            new import_obsidian2.Notice(`Collaborator profile "${this.userText}" created and saved!`);
-            this.step = 4;
-            this.renderStep();
-          } else {
-            new import_obsidian2.Notice(`User creation failed: ${res.text}`);
-          }
-        } catch (err) {
-          new import_obsidian2.Notice(`Failed to register standard user: ${err.message}`);
-        }
-      }));
-    } else if (this.step === 4) {
-      card.createEl("h3", { text: "Setup Complete!" });
-      card.createEl("p", { text: "Everything has been automatically configured. Your sync server is active, credentials have been saved, and live collaborative editing is armed!" });
-      const detailList = card.createEl("ul");
-      detailList.createEl("li", { text: `Server: ${this.plugin.settings.serverUrl}` });
-      detailList.createEl("li", { text: `Active Profile: ${this.plugin.settings.username}` });
-      detailList.createEl("li", { text: "Collaborator Cursor Color: Active" });
-      new import_obsidian2.Setting(card).addButton((btn) => btn.setButtonText("Close & Start Syncing!").setCta().onClick(() => {
+        this.plugin.settings.username = this.userText;
+        this.plugin.settings.passwordHash = this.userPass;
+        this.plugin.settings.nickname = this.userText;
+        await this.plugin.saveSettings();
+        new import_obsidian2.Notice("Setup complete! Connected to sync network.");
         this.close();
         this.tab.display();
-      }));
-    }
+      } catch (err) {
+        this.plugin.settings.username = this.userText;
+        this.plugin.settings.passwordHash = this.userPass;
+        await this.plugin.saveSettings();
+        new import_obsidian2.Notice(`Configured. Server handshake pending connectivity: ${err.message}`);
+        this.close();
+        this.tab.display();
+      }
+    }));
   }
   onClose() {
     this.contentEl.empty();

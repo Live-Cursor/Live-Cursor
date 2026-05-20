@@ -3,7 +3,95 @@ const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 const Y = require('yjs');
-const utils = require('y-websocket/bin/utils');
+const encoding = require('lib0/encoding');
+const decoding = require('lib0/decoding');
+const syncProtocol = require('y-protocols/sync');
+const awarenessProtocol = require('y-protocols/awareness');
+
+// --- Inline y-websocket connection setup (no internal API dependency) ---
+const docs = new Map();
+
+const messageSync = 0;
+const messageAwareness = 1;
+
+const setupWSConnection = (conn, req, doc) => {
+  conn.binaryType = 'arraybuffer';
+  const awareness = new awarenessProtocol.Awareness(doc);
+
+  // Send initial sync step 1
+  const sendSyncStep1 = () => {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, messageSync);
+    syncProtocol.writeSyncStep1(encoder, doc);
+    conn.send(encoding.toUint8Array(encoder));
+  };
+
+  // Send awareness states
+  const sendAwareness = () => {
+    const states = Array.from(awareness.getStates().keys());
+    if (states.length > 0) {
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, messageAwareness);
+      encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, states));
+      conn.send(encoding.toUint8Array(encoder));
+    }
+  };
+
+  conn.on('message', (message) => {
+    try {
+      const msg = message instanceof ArrayBuffer ? new Uint8Array(message) : message;
+      const decoder = decoding.createDecoder(msg);
+      const msgType = decoding.readVarUint(decoder);
+      if (msgType === messageSync) {
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, messageSync);
+        syncProtocol.readSyncMessage(decoder, encoder, doc, conn);
+        if (encoding.length(encoder) > 1) {
+          conn.send(encoding.toUint8Array(encoder));
+        }
+      } else if (msgType === messageAwareness) {
+        awarenessProtocol.applyAwarenessUpdate(awareness, decoding.readVarUint8Array(decoder), conn);
+      }
+    } catch (e) {
+      console.error('[Daemon] Message handling error:', e);
+    }
+  });
+
+  conn.on('close', () => {
+    awarenessProtocol.removeAwarenessStates(awareness, [doc.clientID], 'connection closed');
+  });
+
+  // Broadcast doc updates to this connection
+  const docUpdateHandler = (update, origin) => {
+    if (origin !== conn) {
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, messageSync);
+      syncProtocol.writeUpdate(encoder, update);
+      conn.send(encoding.toUint8Array(encoder));
+    }
+  };
+
+  // Broadcast awareness to this connection
+  const awarenessUpdateHandler = ({ added, updated, removed }) => {
+    const changedClients = added.concat(updated).concat(removed);
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, messageAwareness);
+    encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients));
+    conn.send(encoding.toUint8Array(encoder));
+  };
+
+  doc.on('update', docUpdateHandler);
+  awareness.on('update', awarenessUpdateHandler);
+
+  conn.on('close', () => {
+    doc.off('update', docUpdateHandler);
+    awareness.off('update', awarenessUpdateHandler);
+  });
+
+  sendSyncStep1();
+  sendAwareness();
+};
+// --- End inline setup ---
 
 // 1. Pure-JS File Database implementation
 class JSONStorage {
@@ -74,7 +162,7 @@ const port = process.env.PORT || 1234;
 const dbDir = process.env.DB_DIR || path.join(__dirname, 'data');
 const dbPath = path.join(dbDir, 'live-cursor-daemon.json');
 const db = new JSONStorage(dbPath);
-const docs = utils.docs;
+// docs map is defined above in the inline setup
 
 console.log(`[Daemon] Local Storage loaded at: ${dbPath}`);
 
@@ -194,7 +282,7 @@ wss.on('connection', (ws, req) => {
   }
 
   // Bind connection to Yjs network synchronization loop
-  utils.setupConnection(ws, req, doc, roomName);
+  setupWSConnection(ws, req, doc);
 
   // Persistence callback hook on document updates
   doc.on('update', (update) => {

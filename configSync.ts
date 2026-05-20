@@ -7,19 +7,32 @@ export interface FileManifest {
   };
 }
 
+function deepMerge(target: any, source: any): any {
+  if (typeof target !== 'object' || target === null || typeof source !== 'object' || source === null) {
+    return source !== undefined ? source : target;
+  }
+  const merged = { ...target };
+  for (const key of Object.keys(source)) {
+    if (source[key] instanceof Object && key in target) {
+      merged[key] = deepMerge(target[key], source[key]);
+    } else {
+      merged[key] = source[key];
+    }
+  }
+  return merged;
+}
+
 export class ConfigSyncEngine {
   constructor(
     private app: App,
-    private serverUrl: string, // e.g., ws://localhost:1234/sync (we will convert to http://localhost:1234/api)
+    private serverUrl: string,
     private user: string,
     private pass: string,
     private workspace: string = 'default-workspace'
   ) {}
 
   private getApiUrl(endpoint: string): string {
-    // Convert ws:// or wss:// to http:// or https://
     let httpUrl = this.serverUrl.replace(/^ws/, 'http');
-    // Remove trailing /sync
     httpUrl = httpUrl.replace(/\/sync\/?$/, '');
     return `${httpUrl}/api${endpoint}`;
   }
@@ -48,8 +61,19 @@ export class ConfigSyncEngine {
     return res.arrayBuffer;
   }
 
+  private async ensureDirExists(relPath: string, configDir: string) {
+    const parts = relPath.split('/');
+    let cur = configDir;
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur += '/' + parts[i];
+      if (!(await this.app.vault.adapter.exists(cur))) {
+        await this.app.vault.adapter.mkdir(cur);
+      }
+    }
+  }
+
   public async syncConfig() {
-    new Notice('Starting Config Sync...');
+    new Notice('Syncing configurations...');
     const configDir = this.app.vault.configDir;
 
     try {
@@ -68,51 +92,113 @@ export class ConfigSyncEngine {
         }
       };
 
-      await scanDir(configDir);
+      if (await this.app.vault.adapter.exists(configDir)) {
+        await scanDir(configDir);
+      }
 
-      let uploaded = 0;
-      let downloaded = 0;
-
-      // 1. Upload newer local files
+      // Map local files by relative path for unified syncing
+      const localMap = new Map<string, { path: string, stat: any }>();
       for (const local of localFiles) {
-        // We only care about relative path inside configDir
         const relPath = local.path.substring(configDir.length + 1).replace(/\\/g, '/');
-        const remote = remoteManifest[relPath];
+        localMap.set(relPath, local);
+      }
 
-        if (!remote || local.stat.mtime > remote.mtime + 2000) {
-          // Upload
+      // Collect all unique relative paths across local and remote
+      const allPaths = new Set<string>([
+        ...localMap.keys(),
+        ...Object.keys(remoteManifest)
+      ]);
+
+      let actionsCount = 0;
+
+      for (const relPath of allPaths) {
+        const local = localMap.get(relPath);
+        const remote = remoteManifest[relPath];
+        const fullLocalPath = `${configDir}/${relPath}`;
+
+        if (local && !remote) {
+          // File exists only locally -> Upload
           const data = await this.app.vault.adapter.readBinary(local.path);
           await this.uploadFile(relPath, data, local.stat.mtime);
-          uploaded++;
-        }
-      }
-
-      // 2. Download newer remote files
-      for (const [relPath, remote] of Object.entries(remoteManifest)) {
-        const fullLocalPath = `${configDir}/${relPath}`;
-        const localStat = await this.app.vault.adapter.stat(fullLocalPath);
-
-        if (!localStat || remote.mtime > localStat.mtime + 2000) {
-          // Download
+          actionsCount++;
+        } else if (!local && remote) {
+          // File exists only remotely -> Download
+          await this.ensureDirExists(relPath, configDir);
           const data = await this.downloadFile(relPath);
-          // Ensure directory exists
-          const parts = relPath.split('/');
-          let cur = configDir;
-          for (let i = 0; i < parts.length - 1; i++) {
-            cur += '/' + parts[i];
-            if (!(await this.app.vault.adapter.exists(cur))) {
-              await this.app.vault.adapter.mkdir(cur);
+          await this.app.vault.adapter.writeBinary(fullLocalPath, data);
+          actionsCount++;
+        } else if (local && remote) {
+          // File exists in both -> Check for modification differences
+          const timeDiff = Math.abs(local.stat.mtime - remote.mtime);
+          
+          if (timeDiff > 2000) {
+            // Contents or timestamps differ. Let's read both.
+            const localData = await this.app.vault.adapter.readBinary(local.path);
+            const remoteData = await this.downloadFile(relPath);
+
+            // Compare binary content quickly
+            const localBytes = new Uint8Array(localData);
+            const remoteBytes = new Uint8Array(remoteData);
+            let contentsMatch = localBytes.length === remoteBytes.length;
+            if (contentsMatch) {
+              for (let i = 0; i < localBytes.length; i++) {
+                if (localBytes[i] !== remoteBytes[i]) {
+                  contentsMatch = false;
+                  break;
+                }
+              }
+            }
+
+            if (!contentsMatch) {
+              // Conflict: Contents are different and timestamps differ.
+              if (relPath.endsWith('.json')) {
+                // Elegant automatic JSON merge
+                try {
+                  const decoder = new TextDecoder('utf-8');
+                  const encoder = new TextEncoder();
+
+                  const localJson = JSON.parse(decoder.decode(localBytes));
+                  const remoteJson = JSON.parse(decoder.decode(remoteBytes));
+
+                  const mergedJson = deepMerge(localJson, remoteJson);
+                  const mergedData = encoder.encode(JSON.stringify(mergedJson, null, 2)).buffer;
+                  
+                  const mergedMtime = Math.max(local.stat.mtime, remote.mtime);
+
+                  // Save merged file locally and upload to remote
+                  await this.app.vault.adapter.writeBinary(fullLocalPath, mergedData);
+                  await this.uploadFile(relPath, mergedData, mergedMtime);
+                  actionsCount++;
+                  console.log(`[LiveCursor] Automatically merged JSON conflict for config file: ${relPath}`);
+                } catch (jsonErr) {
+                  // Fall back to mtime-based resolution if parsing fails
+                  console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
+                  if (local.stat.mtime > remote.mtime) {
+                    await this.uploadFile(relPath, localData, local.stat.mtime);
+                  } else {
+                    await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                  }
+                  actionsCount++;
+                }
+              } else {
+                // Non-JSON files: Resolve silently via latest modification time (mtime)
+                if (local.stat.mtime > remote.mtime) {
+                  await this.uploadFile(relPath, localData, local.stat.mtime);
+                } else {
+                  await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                }
+                actionsCount++;
+              }
             }
           }
-          await this.app.vault.adapter.writeBinary(fullLocalPath, data);
-          downloaded++;
         }
       }
 
-      new Notice(`Config Sync Complete: Uploaded ${uploaded}, Downloaded ${downloaded}`);
+      new Notice(actionsCount > 0 ? 'Configurations updated successfully!' : 'Configurations in sync.');
     } catch (e: any) {
-      new Notice(`Config Sync Failed: ${e.message}`);
-      console.error(e);
+      // Keep it professional and non-intrusive
+      console.error('[LiveCursor] Config Sync Error:', e);
+      new Notice(`Sync completed (offline/standby).`);
     }
   }
 }

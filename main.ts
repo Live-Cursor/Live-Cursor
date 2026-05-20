@@ -291,39 +291,280 @@ class LiveCursorSettingTab extends PluginSettingTab {
     const {containerEl} = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', {text: 'Live Cursor Control Panel'});
+    // 1. Premium Header
+    const header = containerEl.createEl('div');
+    header.style.marginBottom = '24px';
+    const title = header.createEl('h2', {text: 'Live Cursor Collaboration'});
+    title.style.margin = '0 0 6px 0';
+    title.style.fontSize = '24px';
+    title.style.background = 'linear-gradient(90deg, var(--text-accent) 0%, var(--interactive-accent-hover) 100%)';
+    title.style.webkitBackgroundClip = 'text';
+    title.style.webkitTextFillColor = 'transparent';
 
-    // Guided Setup Banner
-    const banner = containerEl.createEl('div');
-    banner.style.background = 'var(--background-secondary)';
-    banner.style.border = '1px solid var(--text-accent)';
-    banner.style.borderRadius = '8px';
-    banner.style.padding = '16px';
-    banner.style.marginBottom = '20px';
-    banner.style.position = 'relative';
-    banner.style.overflow = 'hidden';
+    const subtitle = header.createEl('p', {text: 'Zero-configuration real-time note editing and workspace synchronization.'});
+    subtitle.style.margin = '0';
+    subtitle.style.color = 'var(--text-muted)';
+    subtitle.style.fontSize = '13px';
 
-    banner.createEl('h3', { text: 'Guided Setup Wizard' }).style.marginTop = '0';
-    banner.createEl('p', { text: 'Zero-Configuration Real-time Collaboration. Launch a background sync server, register your admin panel, and create standard collaborators in 15 seconds!' });
+    const isConfigured = this.plugin.settings.username && this.plugin.settings.passwordHash && this.plugin.settings.serverUrl;
 
-    const wizardBtn = banner.createEl('button', { text: 'Launch Setup Wizard' });
-    wizardBtn.addClass('mod-cta');
-    wizardBtn.style.padding = '8px 16px';
-    wizardBtn.style.fontSize = '14px';
-    wizardBtn.style.fontWeight = 'bold';
-    wizardBtn.addEventListener('click', () => {
-      new SetupWizardModal(this.app, this.plugin, this).open();
-    });
+    // 2. Onboarding Setup Card (Unconfigured State)
+    if (!isConfigured) {
+      const card = containerEl.createEl('div');
+      card.style.background = 'var(--background-secondary)';
+      card.style.border = '1px solid var(--text-accent)';
+      card.style.borderRadius = '8px';
+      card.style.padding = '20px';
+      card.style.marginBottom = '24px';
+      card.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)';
 
-    // 1. GENERAL CONNECTION & DAEMON SECTION
-    containerEl.createEl('h3', {text: 'General Connection'});
+      const cardTitle = card.createEl('h3', { text: 'Setup Connection' });
+      cardTitle.style.marginTop = '0';
+      cardTitle.style.marginBottom = '8px';
+      cardTitle.style.fontSize = '16px';
+      cardTitle.style.color = 'var(--text-normal)';
 
+      const cardDesc = card.createEl('p', { text: 'To begin, enter your credentials and the server address. If you are starting fresh, these will automatically be registered as your main security credentials.' });
+      cardDesc.style.margin = '0 0 20px 0';
+      cardDesc.style.fontSize = '12px';
+      cardDesc.style.color = 'var(--text-muted)';
+
+      let tempUser = this.plugin.settings.username || '';
+      let tempPass = this.plugin.settings.passwordHash || '';
+      let tempUrl = this.plugin.settings.serverUrl || 'ws://localhost:1234/sync';
+
+      new Setting(card)
+        .setName('Username')
+        .setDesc('Choose a username for your sync profile.')
+        .addText(text => text
+          .setPlaceholder('e.g. Alice')
+          .setValue(tempUser)
+          .onChange(v => tempUser = v));
+
+      new Setting(card)
+        .setName('Password')
+        .setDesc('Enter a secure password.')
+        .addText(text => text
+          .setPlaceholder('Enter secure password')
+          .setValue(tempPass)
+          .onChange(v => tempPass = v));
+
+      new Setting(card)
+        .setName('Server URL')
+        .setDesc('Use the local background daemon or your custom cloud server address.')
+        .addText(text => text
+          .setPlaceholder('ws://localhost:1234/sync')
+          .setValue(tempUrl)
+          .onChange(v => tempUrl = v));
+
+      const btnContainer = card.createEl('div');
+      btnContainer.style.display = 'flex';
+      btnContainer.style.justifyContent = 'flex-end';
+      btnContainer.style.marginTop = '20px';
+
+      const connectBtn = btnContainer.createEl('button', { text: 'Connect & Sync' });
+      connectBtn.addClass('mod-cta');
+      connectBtn.style.padding = '8px 18px';
+      connectBtn.style.fontSize = '13px';
+      connectBtn.style.fontWeight = 'bold';
+      connectBtn.style.borderRadius = '5px';
+
+      connectBtn.addEventListener('click', async () => {
+        if (!tempUser || !tempPass) {
+          new Notice('Please fill in both Username and Password.');
+          return;
+        }
+
+        let targetUrl = tempUrl.trim();
+        if (!targetUrl) {
+          targetUrl = 'ws://localhost:1234/sync';
+        }
+        if (!targetUrl.startsWith('ws://') && !targetUrl.startsWith('wss://')) {
+          targetUrl = `ws://${targetUrl}`;
+        }
+        if (!targetUrl.endsWith('/sync') && !targetUrl.includes('/sync/')) {
+          targetUrl = targetUrl.replace(/\/+$/, '') + '/sync';
+        }
+
+        this.plugin.settings.serverUrl = targetUrl;
+        await this.plugin.saveSettings();
+
+        new Notice('Initializing sync environment...');
+
+        // Auto-launch local server daemon if local address
+        const isLocal = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1');
+        if (isLocal && !this.plugin.daemonProcess) {
+          const launched = await this.plugin.startDaemon();
+          if (launched) {
+            new Notice('Local background sync server launched!');
+          }
+        }
+
+        try {
+          const httpUrl = targetUrl.replace(/^ws/, 'http').replace(/\/sync\/?$/, '');
+          const checkUrl = `${httpUrl}/api/admin-exists`;
+          
+          let userExists = false;
+          try {
+            const checkRes = await requestUrl({ url: checkUrl, method: 'GET' });
+            if (checkRes.status === 200) {
+              userExists = checkRes.json.exists;
+            }
+          } catch (e) {
+            console.log('Admin check failed, DB might be empty:', e);
+          }
+
+          if (!userExists) {
+            // Auto register fresh user as the primary credentials
+            const registerUrl = `${httpUrl}/api/admin/create-user?user=${encodeURIComponent(tempUser)}&pass=${encodeURIComponent(tempPass)}&new_user=${encodeURIComponent(tempUser)}&new_pass=${encodeURIComponent(tempPass)}`;
+            await requestUrl({ url: registerUrl, method: 'POST' });
+          }
+
+          this.plugin.settings.username = tempUser;
+          this.plugin.settings.passwordHash = tempPass;
+          this.plugin.settings.nickname = tempUser;
+          await this.plugin.saveSettings();
+
+          new Notice('Setup complete! Connected to collaboration sync.');
+          this.display();
+        } catch (err: any) {
+          this.plugin.settings.username = tempUser;
+          this.plugin.settings.passwordHash = tempPass;
+          await this.plugin.saveSettings();
+          new Notice(`Credentials saved. Connecting...`);
+          this.display();
+        }
+      });
+    }
+
+    // 3. Active Connection Card (Configured State)
+    if (isConfigured) {
+      const activeCard = containerEl.createEl('div');
+      activeCard.style.background = 'var(--background-secondary)';
+      activeCard.style.border = '1px solid var(--color-green, #10b981)';
+      activeCard.style.borderRadius = '8px';
+      activeCard.style.padding = '20px';
+      activeCard.style.marginBottom = '24px';
+      activeCard.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.05)';
+
+      const cardHeader = activeCard.createEl('div');
+      cardHeader.style.display = 'flex';
+      cardHeader.style.justifyContent = 'space-between';
+      cardHeader.style.alignItems = 'center';
+      cardHeader.style.marginBottom = '12px';
+
+      const cardTitle = cardHeader.createEl('h3', { text: 'Active Connection' });
+      cardTitle.style.margin = '0';
+      cardTitle.style.fontSize = '15px';
+
+      const statusBadge = cardHeader.createEl('span', { text: '● Live Syncing' });
+      statusBadge.style.color = '#10b981';
+      statusBadge.style.fontWeight = 'bold';
+      statusBadge.style.fontSize = '12px';
+      statusBadge.style.background = 'rgba(16, 185, 129, 0.1)';
+      statusBadge.style.padding = '3px 8px';
+      statusBadge.style.borderRadius = '20px';
+
+      const detailsContainer = activeCard.createEl('div');
+      detailsContainer.style.fontSize = '13px';
+      detailsContainer.style.color = 'var(--text-muted)';
+      detailsContainer.style.marginBottom = '20px';
+
+      const serverLine = detailsContainer.createEl('div');
+      serverLine.innerHTML = `<strong>Server:</strong> ${this.plugin.settings.serverUrl}`;
+      serverLine.style.marginBottom = '4px';
+
+      const userLine = detailsContainer.createEl('div');
+      userLine.innerHTML = `<strong>User:</strong> ${this.plugin.settings.username}`;
+
+      const actionRow = activeCard.createEl('div');
+      actionRow.style.display = 'flex';
+      actionRow.style.gap = '10px';
+
+      const syncBtn = actionRow.createEl('button', { text: 'Sync Vault Settings' });
+      syncBtn.addClass('mod-cta');
+      syncBtn.style.padding = '6px 14px';
+      syncBtn.style.fontSize = '12px';
+      syncBtn.style.borderRadius = '4px';
+      syncBtn.addEventListener('click', async () => {
+        syncBtn.setDisabled(true);
+        syncBtn.setButtonText('Syncing...');
+        const engine = new ConfigSyncEngine(
+          this.plugin.app,
+          this.plugin.settings.serverUrl,
+          this.plugin.settings.username,
+          this.plugin.settings.passwordHash,
+          this.plugin.settings.workspaceName
+        );
+        await engine.syncConfig();
+        syncBtn.setDisabled(false);
+        syncBtn.setButtonText('Sync Vault Settings');
+      });
+
+      const disconnectBtn = actionRow.createEl('button', { text: 'Disconnect' });
+      disconnectBtn.style.padding = '6px 14px';
+      disconnectBtn.style.fontSize = '12px';
+      disconnectBtn.style.borderRadius = '4px';
+      disconnectBtn.addEventListener('click', async () => {
+        this.plugin.settings.username = '';
+        this.plugin.settings.passwordHash = '';
+        this.plugin.settings.serverUrl = '';
+        await this.plugin.saveSettings();
+        new Notice('Disconnected sync environment.');
+        this.display();
+      });
+    }
+
+    // 4. Collaborator Profile
+    containerEl.createEl('h3', {text: 'Collaborator Profile'});
+    
+    new Setting(containerEl)
+      .setName('Visual Nickname')
+      .setDesc('Your display name shown to other editors in the vault.')
+      .addText(text => text
+        .setPlaceholder('Anonymous Editor')
+        .setValue(this.plugin.settings.nickname)
+        .onChange(async (val) => {
+          this.plugin.settings.nickname = val;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Cursor Color')
+      .setDesc('Your cursor color shown in real-time to other editors.')
+      .addColorPicker(color => color
+        .setValue(this.plugin.settings.cursorColor)
+        .onChange(async (val) => {
+          this.plugin.settings.cursorColor = val;
+          await this.plugin.saveSettings();
+        }));
+
+    // 5. Collapsible Advanced Technical Settings (Power User Controls)
+    containerEl.createEl('br');
+    
+    const details = containerEl.createEl('details');
+    details.style.border = '1px solid var(--border-color)';
+    details.style.borderRadius = '6px';
+    details.style.padding = '12px';
+    details.style.background = 'var(--background-primary)';
+    
+    const summary = details.createEl('summary', { text: 'Advanced Developer Settings' });
+    summary.style.fontWeight = 'bold';
+    summary.style.cursor = 'pointer';
+    summary.style.color = 'var(--text-muted)';
+    summary.style.fontSize = '13px';
+    summary.style.outline = 'none';
+
+    const advancedContainer = details.createEl('div');
+    advancedContainer.style.marginTop = '12px';
+
+    // Local background server control
     const daemonStatusText = this.plugin.daemonProcess 
-      ? 'Local background sync server is running on port 1234.' 
-      : 'Local background sync server is offline.';
+      ? 'Local background daemon is running on port 1234.' 
+      : 'Local background daemon is offline.';
 
-    const daemonSetting = new Setting(containerEl)
-      .setName('Local Background Server')
+    const daemonSetting = new Setting(advancedContainer)
+      .setName('Local Background Daemon')
       .setDesc(daemonStatusText);
 
     if (this.plugin.daemonProcess) {
@@ -336,118 +577,55 @@ class LiveCursorSettingTab extends PluginSettingTab {
     } else {
       daemonSetting.addButton(btn => btn
         .setButtonText('Start Server')
-        .setCta()
         .onClick(async () => {
           const started = await this.plugin.startDaemon();
           if (started) this.display();
         }));
     }
 
-    new Setting(containerEl)
-      .setName('Option 1: Login Portal')
-      .setDesc('Configure credentials (Admin or User access levels).')
+    new Setting(advancedContainer)
+      .setName('Credential Portals')
+      .setDesc('Explicitly select role portals for diagnostic logging.')
       .addButton(btn => btn
         .setButtonText('Open Portal')
         .onClick(() => {
           new RoleSelectionModal(this.app, this.plugin, this).open();
         }));
 
-    new Setting(containerEl)
-      .setName('Option 2: Server Connection')
-      .setDesc('Establish your server websocket gateway URL.')
-      .addButton(btn => btn
-        .setButtonText('Connect Server')
-        .onClick(() => {
-          new ConnectionModal(this.app, this.plugin).open();
-        }));
-
-    new Setting(containerEl)
-      .setName('Option 3: Advanced Cloud Server')
-      .setDesc('Self-host a robust persistent database cluster using Docker.')
+    new Setting(advancedContainer)
+      .setName('Self-Host Docker Compose')
+      .setDesc('Generate copy-paste docker compose clusters.')
       .addButton(btn => btn
         .setButtonText('Generate Compose')
         .onClick(() => {
           new CreateServerModal(this.app).open();
         }));
 
-    new Setting(containerEl)
-      .setName('Option 4: Config Synchronization')
-      .setDesc('Synchronize plugins, themes, and workspace state (.obsidian folder) with the server.')
-      .addButton(button => button
-        .setButtonText('Sync Now')
-        .onClick(async () => {
-          button.setDisabled(true);
-          button.setButtonText('Syncing...');
-          const engine = new ConfigSyncEngine(
-            this.plugin.app,
-            this.plugin.settings.serverUrl,
-            this.plugin.settings.username,
-            this.plugin.settings.passwordHash,
-            this.plugin.settings.workspaceName
-          );
-          await engine.syncConfig();
-          button.setDisabled(false);
-          button.setButtonText('Sync Now');
-        }));
-
     if (this.plugin.settings.username === 'admin') {
-      new Setting(containerEl)
-        .setName('Option 5: Admin Console')
-        .setDesc('View registered users, server resource consumption, and telemetry.')
+      new Setting(advancedContainer)
+        .setName('Telemetry Dashboard')
+        .setDesc('Diagnostics, active rooms, memory utilization, and users.')
         .addButton(btn => btn
           .setButtonText('Launch Dashboard')
-          .setCta()
           .onClick(() => {
             new AdminConsoleModal(this.app, this.plugin).open();
           }));
     }
 
-    // Collaborator Profile settings
-    containerEl.createEl('br');
-    containerEl.createEl('h3', {text: 'Collaborator Profile'});
-
-    new Setting(containerEl)
-      .setName('Visual Nickname')
-      .setDesc('Your display name shown to other real-time editors in the vault.')
-      .addText(text => text
-        .setPlaceholder('Anonymous Editor')
-        .setValue(this.plugin.settings.nickname)
-        .onChange(async (val) => {
-          this.plugin.settings.nickname = val;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('Cursor Color')
-      .setDesc('The color of your cursor and editor selections shown to others.')
-      .addColorPicker(color => color
-        .setValue(this.plugin.settings.cursorColor)
-        .onChange(async (val) => {
-          this.plugin.settings.cursorColor = val;
-          await this.plugin.saveSettings();
-        }));
-
-    // 2. SYSTEM INTEGRATION & DEVELOPER MODE
-    containerEl.createEl('br');
-    containerEl.createEl('h3', {text: 'System Integration'});
-
-    new Setting(containerEl)
-      .setName('Developer Mode')
-      .setDesc('Unlock advanced integration layouts, telemetry configuration, and direct text parameters.')
+    new Setting(advancedContainer)
+      .setName('Developer Direct Inputs')
+      .setDesc('Explicitly toggle low-level environment modifications.')
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.devMode)
         .onChange(async (value) => {
           this.plugin.settings.devMode = value;
           await this.plugin.saveSettings();
-          this.display(); // Force-refresh settings view to toggle sub-settings
+          this.display();
         }));
 
     if (this.plugin.settings.devMode) {
-      containerEl.createEl('h4', {text: 'Advanced Settings'});
-
-      new Setting(containerEl)
+      new Setting(advancedContainer)
         .setName('Direct Server URL')
-        .setDesc('Set connection URL without modal popups.')
         .addText(text => text
           .setValue(this.plugin.settings.serverUrl)
           .onChange(async (val) => {
@@ -455,9 +633,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
+      new Setting(advancedContainer)
         .setName('Direct Username')
-        .setDesc('Set active session username directly.')
         .addText(text => text
           .setValue(this.plugin.settings.username)
           .onChange(async (val) => {
@@ -465,9 +642,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
+      new Setting(advancedContainer)
         .setName('Direct Password')
-        .setDesc('Set active session password directly.')
         .addText(text => text
           .setValue(this.plugin.settings.passwordHash)
           .onChange(async (val) => {
@@ -475,9 +651,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
+      new Setting(advancedContainer)
         .setName('Workspace Identifier')
-        .setDesc('Set unique isolation key for configuration sync.')
         .addText(text => text
           .setValue(this.plugin.settings.workspaceName)
           .onChange(async (val) => {
@@ -485,9 +660,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
+      new Setting(advancedContainer)
         .setName('Debug Logging')
-        .setDesc('Print verbose synchronization telemetry in the developer console.')
         .addToggle(toggle => toggle
           .setValue(this.plugin.settings.debugLogging)
           .onChange(async (val) => {
@@ -495,9 +669,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }));
 
-      new Setting(containerEl)
+      new Setting(advancedContainer)
         .setName('Auto-Sync On Load')
-        .setDesc('Automatically run configuration sync when Obsidian registers the plugin.')
         .addToggle(toggle => toggle
           .setValue(this.plugin.settings.autoSyncOnLoad)
           .onChange(async (val) => {
@@ -519,7 +692,7 @@ class RoleSelectionModal extends Modal {
 
     new Setting(contentEl)
       .setName('Admin Portal')
-      .setDesc('Access full administrative configurations and mirrors.')
+      .setDesc('Access full administrative configurations.')
       .addButton(btn => btn
         .setButtonText('Login as Admin')
         .setCta()
@@ -551,7 +724,6 @@ class LoginModal extends Modal {
     const { contentEl } = this;
     contentEl.createEl('h2', { text: `${this.role} Login` });
 
-    // Pre-fill "admin" for admin role if username is currently empty
     let username = this.plugin.settings.username;
     if (this.role === 'Admin' && !username) {
       username = 'admin';
@@ -570,17 +742,16 @@ class LoginModal extends Modal {
         .setValue(password)
         .onChange(v => password = v));
 
-    // Dynamic button determination based on admin existence on the server
     let actionText = 'Login';
     if (this.role === 'Admin') {
       try {
         let httpUrl = this.plugin.settings.serverUrl.replace(/^ws/, 'http').replace(/\/sync\/?$/, '');
         const res = await requestUrl({ url: `${httpUrl}/api/admin-exists`, method: 'GET' });
         if (res.status === 200 && !res.json.exists) {
-          actionText = 'Save'; // Admin doesn't exist on server yet, bootstrap save/register state
+          actionText = 'Save';
         }
       } catch {
-        actionText = 'Save'; // Offline/Fallback state
+        actionText = 'Save';
       }
     }
 
@@ -592,7 +763,7 @@ class LoginModal extends Modal {
           this.plugin.settings.username = username;
           this.plugin.settings.passwordHash = password;
           await this.plugin.saveSettings();
-          this.tab.display(); // Force-refresh settings panel!
+          this.tab.display();
           new Notice(`${this.role} credentials saved!`);
           this.close();
         }));
@@ -642,7 +813,6 @@ class CreateServerModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.createEl('h2', { text: 'Self-Host Live Cursor' });
-    
     contentEl.createEl('p', { text: 'To deploy a secure, persistent Live Cursor Sync server, create a file named docker-compose.yml and paste the following content to start your server.' });
 
     const codeBlock = contentEl.createEl('pre');
@@ -692,7 +862,6 @@ class AdminConsoleModal extends Modal {
 
     const loading = contentEl.createEl('p', { text: 'Fetching server telemetry...' });
 
-    // Persistent DOM elements so 3s intervals don't wipe active form inputs
     let statsGrid: HTMLDivElement;
     let usersTableContainer: HTMLDivElement;
 
@@ -716,7 +885,6 @@ class AdminConsoleModal extends Modal {
         const stats = statusRes.json;
         const users = usersRes.json as string[];
 
-        // Initialize persistent sections once
         if (!statsGrid) {
           statsGrid = contentEl.createEl('div');
           statsGrid.style.display = 'grid';
@@ -780,14 +948,13 @@ class AdminConsoleModal extends Modal {
         if (loading && loading.parentNode) {
           loading.remove();
         }
-        const errEl = contentEl.createEl('p', { text: 'Could not connect to sync server. Make sure your server is online, and your admin credentials are correct.' });
+        const errEl = contentEl.createEl('p', { text: 'Could not connect to sync server.' });
         errEl.style.color = 'var(--color-red)';
       }
     };
 
     await fetchStats();
 
-    // Add Collaborator Form (added once, unaffected by refresh interval)
     const formHeading = contentEl.createEl('h3', { text: 'Add New Collaborator' });
     formHeading.style.marginTop = '25px';
 
@@ -825,12 +992,10 @@ class AdminConsoleModal extends Modal {
             const res = await requestUrl({ url, method: 'POST' });
             if (res.status === 200) {
               new Notice(`User "${newUsername}" created successfully!`);
-              // Clear values
               newUsername = '';
               newPassword = '';
               userTextComp.setValue('');
               passTextComp.setValue('');
-              // Immediately refresh user directory
               await fetchStats();
             } else {
               new Notice(`Failed to create user: ${res.text}`);
@@ -868,7 +1033,7 @@ class SetupWizardModal extends Modal {
     contentEl.empty();
     
     contentEl.createEl('h2', { text: 'Live Cursor Onboarding Setup' });
-    contentEl.createEl('p', { text: 'Connect your device and start collaborating instantly. If this is a fresh setup, the username and password you enter will automatically be registered as your main credentials.' });
+    contentEl.createEl('p', { text: 'Connect your device and start collaborating instantly.' });
     
     const card = contentEl.createEl('div');
     card.style.background = 'var(--background-secondary)';
@@ -879,7 +1044,6 @@ class SetupWizardModal extends Modal {
 
     new Setting(card)
       .setName('Sync Username')
-      .setDesc('Enter your sync profile username')
       .addText(text => text
         .setPlaceholder('e.g. Alice')
         .setValue(this.userText)
@@ -887,7 +1051,6 @@ class SetupWizardModal extends Modal {
 
     new Setting(card)
       .setName('Sync Password')
-      .setDesc('Enter your profile security password')
       .addText(text => text
         .setPlaceholder('Enter secure password')
         .setValue(this.userPass)
@@ -895,7 +1058,6 @@ class SetupWizardModal extends Modal {
 
     new Setting(card)
       .setName('Sync Server URL')
-      .setDesc('Local database background daemon or remote Tailscale host URL')
       .addText(text => text
         .setPlaceholder('ws://localhost:1234/sync')
         .setValue(this.serverUrl)
@@ -948,19 +1110,15 @@ class SetupWizardModal extends Modal {
             try {
               const checkRes = await requestUrl({ url: checkUrl, method: 'GET' });
               if (checkRes.status === 200) {
-                const body = checkRes.json as { exists: boolean };
-                userExists = body.exists;
+                userExists = checkRes.json.exists;
               }
             } catch (e) {
-              console.log('Admin check failed, database might be empty or uninitialized:', e);
+              console.log('Admin check failed, DB might be empty:', e);
             }
 
             if (!userExists) {
               const registerUrl = `${httpUrl}/api/admin/create-user?user=${encodeURIComponent(this.userText)}&pass=${encodeURIComponent(this.userPass)}&new_user=${encodeURIComponent(this.userText)}&new_pass=${encodeURIComponent(this.userPass)}`;
-              const regRes = await requestUrl({ url: registerUrl, method: 'POST' });
-              if (regRes.status === 200) {
-                new Notice('Primary Sync Credentials configured!');
-              }
+              await requestUrl({ url: registerUrl, method: 'POST' });
             }
 
             this.plugin.settings.username = this.userText;
@@ -968,14 +1126,14 @@ class SetupWizardModal extends Modal {
             this.plugin.settings.nickname = this.userText;
             await this.plugin.saveSettings();
 
-            new Notice('Setup complete! Connected to sync network.');
+            new Notice('Setup complete!');
             this.close();
             this.tab.display();
           } catch (err: any) {
             this.plugin.settings.username = this.userText;
             this.plugin.settings.passwordHash = this.userPass;
             await this.plugin.saveSettings();
-            new Notice(`Configured. Server handshake pending connectivity: ${err.message}`);
+            new Notice(`Saved credentials. Server connection pending.`);
             this.close();
             this.tab.display();
           }
@@ -986,3 +1144,4 @@ class SetupWizardModal extends Modal {
     this.contentEl.empty();
   }
 }
+

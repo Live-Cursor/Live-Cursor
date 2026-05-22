@@ -3,8 +3,10 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { yCollab } from 'y-codemirror.next';
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
-import { Extension } from '@codemirror/state';
+import { Extension, Compartment } from '@codemirror/state';
 import { ConfigSyncEngine } from './configSync';
+
+const collabCompartment = new Compartment();
 
 interface LiveCursorSettings {
   serverUrl: string;
@@ -189,93 +191,103 @@ export default class LiveCursorPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  private syncFile(file: TFile) {
-    if (this.activeSyncs.has(file.path)) {
-      return; // Already syncing
-    }
+  private configureEditorForFile(file: TFile) {
+    const sync = this.activeSyncs.get(file.path);
+    if (!sync) return;
 
-    if (!this.settings.serverUrl || !this.settings.username || !this.settings.passwordHash) {
-      return; // Missing settings
-    }
-
-    console.log(`[LiveCursor] Starting sync for ${file.path}`);
-    const doc = new Y.Doc();
-    const ytext = doc.getText('content');
-
-    const roomName = encodeURIComponent(file.path);
-    
-    // Y-Websocket appends roomName to the URL. We must pass auth via params.
-    const provider = new WebsocketProvider(this.settings.serverUrl, roomName, doc, {
-      connect: true,
-      params: {
-        user: this.settings.username,
-        pass: this.settings.passwordHash
-      }
-    });
-
-    // Dynamic collaborator profile injection for Live Cursors
-    provider.awareness.setLocalStateField('user', {
-      name: this.settings.nickname || this.settings.username || 'Collaborator',
-      color: this.settings.cursorColor || '#6366f1',
-      colorLight: (this.settings.cursorColor || '#6366f1') + '33'
-    });
-
-    provider.on('status', (event: any) => {
-      console.log(`[LiveCursor] Provider status for ${file.path}: ${event.status}`);
-    });
-
-    provider.on('sync', async (isSynced: boolean) => {
-      if (isSynced) {
-        console.log(`[LiveCursor] Synced with server for ${file.path}`);
-        
-        // Ensure local content merges correctly with the server state.
-        const localContent = await this.app.vault.read(file);
-        
-        if (ytext.toString().length === 0 && localContent.length > 0) {
-          ytext.insert(0, localContent);
-        } else if (ytext.toString() !== localContent) {
-           // We received changes from the server that differ from local disk.
-           // y-codemirror.next will update the editor DOM.
-           // However, to ensure absolute durability (e.g. mobile sandbox),
-           // we defensively write the Yjs truth to the Vault file.
-           await this.app.vault.modify(file, ytext.toString());
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) {
+        const cm = (leaf.view.editor as any).cm as EditorView;
+        if (cm) {
+          const ytext = sync.doc.getText('content');
+          cm.dispatch({
+            effects: collabCompartment.reconfigure(
+              yCollab(ytext, sync.provider.awareness)
+            )
+          });
+          console.log(`[LiveCursor] Bound yCollab to editor for ${file.path}`);
         }
       }
     });
+  }
 
-    // Phase 4: Defensive Vault writing on network updates
-    ytext.observe((event, transaction) => {
-      // If the change came from a remote peer, save it to disk
-      if (!transaction.local) {
-         // Debounce this in a real scenario, but write to vault API
-         this.app.vault.modify(file, ytext.toString()).catch(e => console.error(e));
+  private syncFile(file: TFile) {
+    let sync = this.activeSyncs.get(file.path);
+
+    if (!sync) {
+      if (!this.settings.serverUrl || !this.settings.username || !this.settings.passwordHash) {
+        return; // Missing settings
       }
-    });
 
-    this.activeSyncs.set(file.path, { doc, provider });
+      console.log(`[LiveCursor] Starting sync for ${file.path}`);
+      const doc = new Y.Doc();
+      const ytext = doc.getText('content');
 
-    // Force an update to the editor so the yCollab extension picks up the new provider
-    this.app.workspace.updateOptions();
+      const roomName = encodeURIComponent(file.path);
+      
+      // Y-Websocket appends roomName to the URL. We must pass auth via params.
+      const provider = new WebsocketProvider(this.settings.serverUrl, roomName, doc, {
+        connect: true,
+        params: {
+          user: this.settings.username,
+          pass: this.settings.passwordHash
+        }
+      });
+
+      // Dynamic collaborator profile injection for Live Cursors
+      provider.awareness.setLocalStateField('user', {
+        name: this.settings.nickname || this.settings.username || 'Collaborator',
+        color: this.settings.cursorColor || '#6366f1',
+        colorLight: (this.settings.cursorColor || '#6366f1') + '33'
+      });
+
+      provider.on('status', (event: any) => {
+        console.log(`[LiveCursor] Provider status for ${file.path}: ${event.status}`);
+      });
+
+      provider.on('sync', async (isSynced: boolean) => {
+        if (isSynced) {
+          console.log(`[LiveCursor] Synced with server for ${file.path}`);
+          
+          // Ensure local content merges correctly with the server state.
+          const localContent = await this.app.vault.read(file);
+          
+          if (ytext.toString().length === 0 && localContent.length > 0) {
+            ytext.insert(0, localContent);
+          } else if (ytext.toString() !== localContent) {
+             // We received changes from the server that differ from local disk.
+             // y-codemirror.next will update the editor DOM.
+             // However, to ensure absolute durability (e.g. mobile sandbox),
+             // we defensively write the Yjs truth to the Vault file.
+             await this.app.vault.modify(file, ytext.toString());
+          }
+
+          this.configureEditorForFile(file);
+        }
+      });
+
+      // Phase 4: Defensive Vault writing on network updates
+      ytext.observe((event, transaction) => {
+        // If the change came from a remote peer, save it to disk
+        if (!transaction.local) {
+           // Debounce this in a real scenario, but write to vault API
+           this.app.vault.modify(file, ytext.toString()).catch(e => console.error(e));
+        }
+      });
+
+      sync = { doc, provider };
+      this.activeSyncs.set(file.path, sync);
+    }
+
+    // Force editor configuration on layout load
+    setTimeout(() => this.configureEditorForFile(file), 100);
   }
 
   /**
    * Creates a dynamic CodeMirror extension that binds yCollab to the currently active Yjs document
    */
   private createCollabExtension(): Extension {
-    const plugin = this;
-
-    return ViewPlugin.fromClass(class {
-      constructor(public view: EditorView) {}
-      update(update: ViewUpdate) { }
-    }, {
-      provide: pluginSpec => {
-        // We use a compartment or dynamic state to inject yCollab
-        return EditorView.updateListener.of((update) => {
-           // This is just a placeholder listener. The actual injection of yCollab needs to happen
-           // when the editor is created. We will handle this in Phase 4 properly.
-        });
-      }
-    });
+    return collabCompartment.of([]);
   }
 }
 

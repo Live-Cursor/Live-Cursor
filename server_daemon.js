@@ -204,6 +204,123 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // --- Workspace Sync APIs (Authenticated) ---
+  if (url.pathname === '/api/manifest') {
+    const workspace = query.workspace || 'default-workspace';
+    const wsDir = path.join(dbDir, 'workspaces', workspace);
+    const manifest = {};
+
+    const readDirRecursive = (dir, currentSubPath = '') => {
+      if (!fs.existsSync(dir)) return;
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const relPath = currentSubPath ? `${currentSubPath}/${file}` : file;
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          readDirRecursive(fullPath, relPath);
+        } else {
+          manifest[relPath] = {
+            size: stat.size,
+            mtime: stat.mtimeMs
+          };
+        }
+      }
+    };
+
+    if (fs.existsSync(wsDir)) {
+      readDirRecursive(wsDir);
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(manifest));
+    return;
+  }
+
+  if (url.pathname === '/api/upload' && req.method === 'POST') {
+    const workspace = query.workspace || 'default-workspace';
+    const relPath = query.path;
+    const mtime = parseInt(query.mtime);
+
+    if (!relPath) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('Missing path parameter');
+      return;
+    }
+
+    // Path traversal check
+    const wsDir = path.resolve(path.join(dbDir, 'workspaces', workspace));
+    const targetPath = path.resolve(path.join(wsDir, relPath));
+    if (!targetPath.startsWith(wsDir)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden path');
+      return;
+    }
+
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        const targetDir = path.dirname(targetPath);
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        fs.writeFileSync(targetPath, buffer);
+
+        if (!isNaN(mtime)) {
+          const mtimeSec = mtime / 1000;
+          fs.utimesSync(targetPath, mtimeSec, mtimeSec);
+        }
+
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('OK');
+      } catch (e) {
+        console.error('[Daemon] Upload failed:', e);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end(`Internal Server Error: ${e.message}`);
+      }
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/download') {
+    const workspace = query.workspace || 'default-workspace';
+    const relPath = query.path;
+
+    if (!relPath) {
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('Missing path parameter');
+      return;
+    }
+
+    // Path traversal check
+    const wsDir = path.resolve(path.join(dbDir, 'workspaces', workspace));
+    const targetPath = path.resolve(path.join(wsDir, relPath));
+    if (!targetPath.startsWith(wsDir)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden path');
+      return;
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('File Not Found');
+      return;
+    }
+
+    try {
+      const data = fs.readFileSync(targetPath);
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      res.end(data);
+    } catch (e) {
+      console.error('[Daemon] Download failed:', e);
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end(`Internal Server Error: ${e.message}`);
+    }
+    return;
+  }
+
   // Create Standard User (Admin authenticated)
   if (url.pathname === '/api/admin/create-user' && req.method === 'POST') {
     const newUser = query.new_user;

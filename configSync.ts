@@ -6,6 +6,7 @@ export interface FileManifest {
   [filePath: string]: {
     size: number;
     mtime: number;
+    device?: string;
   };
 }
 
@@ -33,7 +34,8 @@ export class ConfigSyncEngine {
     private serverUrl: string,
     private user: string,
     private pass: string,
-    private workspace: string = 'default-workspace'
+    private workspace: string = 'default-workspace',
+    private deviceName: string = 'Unknown Device'
   ) {}
 
   private getApiUrl(endpoint: string): string {
@@ -202,8 +204,9 @@ export class ConfigSyncEngine {
                 } catch (jsonErr) {
                   // Fall back to mtime-based resolution if parsing fails
                   console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
-                  const localConflictPath = `Sync Conflicts/Local/${relPath}`;
-                  const remoteConflictPath = `Sync Conflicts/Remote/${relPath}`;
+                  const remoteDevice = remote.device || 'Remote';
+                  const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
+                  const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
                   
                   await this.ensureDirExists(localConflictPath, '');
                   await this.writeToVaultUI(localConflictPath, localData);
@@ -220,14 +223,15 @@ export class ConfigSyncEngine {
                 }
               } else {
                 // Non-JSON files: Resolve silently via latest modification time (mtime)
-                const localConflictPath = `Sync Conflicts/Local/${relPath}`;
-                  const remoteConflictPath = `Sync Conflicts/Remote/${relPath}`;
+                const remoteDevice = remote.device || 'Remote';
+                const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
+                const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
                   
-                  await this.ensureDirExists(localConflictPath, '');
-                  await this.writeToVaultUI(localConflictPath, localData);
+                await this.ensureDirExists(localConflictPath, '');
+                await this.writeToVaultUI(localConflictPath, localData);
                   
-                  await this.ensureDirExists(remoteConflictPath, '');
-                  await this.writeToVaultUI(remoteConflictPath, remoteData);
+                await this.ensureDirExists(remoteConflictPath, '');
+                await this.writeToVaultUI(remoteConflictPath, remoteData);
 
                 if (local.stat.mtime > remote.mtime) {
                   await this.uploadFile(relPath, localData, local.stat.mtime);
@@ -284,7 +288,7 @@ export class ConfigSyncEngine {
       // Map local files by relative path for unified syncing
       const localMap = new Map<string, { path: string, stat: any }>();
       for (const local of localFiles) {
-        const relPath = local.path.startsWith('/') ? local.path.substring(1) : local.path;
+        const relPath = (local.path.startsWith('/') ? local.path.substring(1) : local.path).replace(/\\/g, '/');
         localMap.set(relPath, local);
       }
 
@@ -299,7 +303,7 @@ export class ConfigSyncEngine {
 
       const uploadFileFn = async (relPath: string, data: ArrayBuffer, mtime: number) => {
         filesMap.set(relPath, new Uint8Array(data));
-        manifestMap.set(relPath, { size: data.byteLength, mtime });
+        manifestMap.set(relPath, { size: data.byteLength, mtime, device: this.deviceName });
       };
 
       const downloadFileFn = async (relPath: string): Promise<ArrayBuffer> => {
@@ -376,8 +380,9 @@ export class ConfigSyncEngine {
                 } catch (jsonErr) {
                   // Fall back to mtime-based resolution if parsing fails
                   console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
-                  const localConflictPath = `Sync Conflicts/Local/${relPath}`;
-                  const remoteConflictPath = `Sync Conflicts/Remote/${relPath}`;
+                  const remoteDevice = remote.device || 'Remote';
+                  const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
+                  const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
                   
                   await this.ensureDirExists(localConflictPath, '');
                   await this.writeToVaultUI(localConflictPath, localData);
@@ -394,14 +399,15 @@ export class ConfigSyncEngine {
                 }
               } else {
                 // Non-JSON files: Resolve silently via latest modification time (mtime)
-                const localConflictPath = `Sync Conflicts/Local/${relPath}`;
-                  const remoteConflictPath = `Sync Conflicts/Remote/${relPath}`;
+                const remoteDevice = remote.device || 'Remote';
+                const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
+                const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
                   
-                  await this.ensureDirExists(localConflictPath, '');
-                  await this.writeToVaultUI(localConflictPath, localData);
+                await this.ensureDirExists(localConflictPath, '');
+                await this.writeToVaultUI(localConflictPath, localData);
                   
-                  await this.ensureDirExists(remoteConflictPath, '');
-                  await this.writeToVaultUI(remoteConflictPath, remoteData);
+                await this.ensureDirExists(remoteConflictPath, '');
+                await this.writeToVaultUI(remoteConflictPath, remoteData);
 
                 if (local.stat.mtime > remote.mtime) {
                   await uploadFileFn(relPath, localData, local.stat.mtime);

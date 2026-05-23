@@ -111,7 +111,8 @@ export default class LiveCursorPlugin extends Plugin {
             this.settings.serverUrl,
             this.settings.username,
             this.settings.passwordHash,
-            this.settings.workspaceName
+            this.settings.workspaceName,
+            this.settings.nickname || 'Unknown Device'
           );
           await engine.syncConfig();
         } catch (e) {
@@ -240,6 +241,16 @@ export default class LiveCursorPlugin extends Plugin {
       this.vaultSyncProvider.on('status', (event: any) => {
         console.log('[LiveCursor] Vault Mesh Status:', event.status);
       });
+
+      const engine = new ConfigSyncEngine(
+        this.app,
+        this.settings.serverUrl,
+        this.settings.username,
+        this.settings.passwordHash,
+        this.settings.workspaceName,
+        this.settings.nickname || 'Unknown Device'
+      );
+      engine.setupBackgroundListener(this.vaultSyncDoc);
     }
   }
 
@@ -493,7 +504,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
               this.plugin.settings.serverUrl,
               this.plugin.settings.username,
               this.plugin.settings.passwordHash,
-              this.plugin.settings.workspaceName
+              this.plugin.settings.workspaceName,
+              this.plugin.settings.nickname || 'Unknown Device'
             );
             btn.setButtonText('Syncing...');
             await engine.syncConfig();
@@ -564,7 +576,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             this.plugin.settings.serverUrl,
             this.plugin.settings.username,
             this.plugin.settings.passwordHash,
-            this.plugin.settings.workspaceName
+            this.plugin.settings.workspaceName,
+            this.plugin.settings.nickname || 'Unknown Device'
           );
           btn.setButtonText('Syncing...');
           await engine.syncConfig();
@@ -609,7 +622,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             this.plugin.settings.serverUrl,
             this.plugin.settings.username,
             this.plugin.settings.passwordHash,
-            this.plugin.settings.workspaceName
+            this.plugin.settings.workspaceName,
+            this.plugin.settings.nickname || 'Unknown Device'
           );
           btn.setButtonText('Syncing...');
           await engine.syncConfigViaWebrtc(this.plugin.vaultSyncDoc);

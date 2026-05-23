@@ -1,4 +1,7 @@
-# Live Cursor v1.1.4 Release Notes
+# Live Cursor v1.1.5 Release Notes
+
+**v1.1.5 Feature Upgrades:**
+- **Human Readable Conflicts:** When file sync conflicts occur, the conflicting files are now intelligently separated into `Sync Conflicts/Local/` and `Sync Conflicts/Remote/` folders. Crucially, they perfectly retain their original `.md` extensions and nested folder structures, so you can easily browse, read, and merge them natively inside the Obsidian UI!
 
 **v1.1.4 Hotfixes:**
 - **UI Visibility Fix:** Files downloaded from the WebRTC Mesh now instantly appear in the Obsidian File Explorer UI! Previously, the engine used a low-level disk adapter which bypassed Obsidian's indexing cache, requiring a restart to see the files.

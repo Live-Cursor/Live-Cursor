@@ -33,7 +33,6 @@ jobs:
             manifest.json
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          body: |
-            Release ${{ github.ref_name }} compiled and published automatically by GitHub Actions.
+          body_path: ReleaseNotes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -227,56 +227,41 @@ export class ConfigSyncEngine {
   }
 
   public async syncConfigViaWebrtc(roomName: string, password?: string) {
-    new Notice('Connecting to Mobile WebRTC Mesh for config sync...');
-    const configDir = this.app.vault.configDir;
-
+    new Notice('Syncing full vault via WebRTC Mesh...');
+    
     try {
-      const doc = new Y.Doc();
-      const providerOptions: any = {
-        signaling: ['wss://signaling.yjs.dev']
-      };
-      if (password) {
-        providerOptions.password = password;
+      const doc = (this.plugin as any).vaultSyncDoc;
+      if (!doc) {
+         new Notice('WebRTC mesh not connected yet. Check settings.');
+         return;
       }
-      const provider = new WebrtcProvider(`config-sync-${roomName}`, doc, providerOptions);
-
-      // Wait for initial sync with peers
-      await new Promise<void>((resolve) => {
-        let timeout = setTimeout(() => resolve(), 3000); // 3s timeout
-        provider.on('synced', (isSynced: any) => {
-           if (isSynced) {
-             clearTimeout(timeout);
-             resolve();
-           }
-        });
-      });
-
+      
       const manifestMap = doc.getMap('manifest');
       const filesMap = doc.getMap('files');
 
       const remoteManifest = manifestMap.toJSON() as FileManifest;
       const localFiles: { path: string, stat: any }[] = [];
 
-      // Recursive local scan
+      // Recursive local scan of entire vault
       const scanDir = async (dir: string) => {
         const list = await this.app.vault.adapter.list(dir);
         for (const file of list.files) {
+          if (file.endsWith('workspace.json') || file.endsWith('workspace-mobile.json') || file.endsWith('.DS_Store')) continue;
           const stat = await this.app.vault.adapter.stat(file);
           if (stat) localFiles.push({ path: file, stat });
         }
         for (const folder of list.folders) {
+          if (folder.includes('.git') || folder.includes('node_modules') || folder.includes('Sync Conflicts') || folder.includes('.obsidian-test')) continue;
           await scanDir(folder);
         }
       };
 
-      if (await this.app.vault.adapter.exists(configDir)) {
-        await scanDir(configDir);
-      }
+      await scanDir('/');
 
       // Map local files by relative path for unified syncing
       const localMap = new Map<string, { path: string, stat: any }>();
       for (const local of localFiles) {
-        const relPath = local.path.substring(configDir.length + 1).replace(/\\/g, '/');
+        const relPath = local.path.startsWith('/') ? local.path.substring(1) : local.path;
         localMap.set(relPath, local);
       }
 
@@ -400,11 +385,7 @@ export class ConfigSyncEngine {
 
       new Notice(actionsCount > 0 ? 'Mesh Configurations updated successfully!' : 'Mesh Configurations in sync.');
       
-      // Keep it alive briefly for peers to pull, then disconnect
-      setTimeout(() => {
-        provider.disconnect();
-        doc.destroy();
-      }, 5000);
+
       
     } catch (e: any) {
       console.error('[LiveCursor] WebRTC Config Sync Error:', e);

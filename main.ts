@@ -45,9 +45,12 @@ export default class LiveCursorPlugin extends Plugin {
   settings!: LiveCursorSettings;
   private activeSyncs: Map<string, { doc: Y.Doc, provider: any }> = new Map();
   private editorExtensions: Extension[] = [];
+  public vaultSyncDoc: Y.Doc | null = null;
+  public vaultSyncProvider: any = null;
 
   async onload() {
     await this.loadSettings();
+    this.startVaultSyncMesh();
 
     if (this.settings.lastVersion !== '1.1.0') {
       setTimeout(() => {
@@ -193,6 +196,8 @@ export default class LiveCursorPlugin extends Plugin {
 
   onunload() {
     this.stopDaemon();
+    if (this.vaultSyncProvider) this.vaultSyncProvider.disconnect();
+    if (this.vaultSyncDoc) this.vaultSyncDoc.destroy();
     for (const [path, sync] of this.activeSyncs.entries()) {
       sync.provider.disconnect();
       sync.doc.destroy();

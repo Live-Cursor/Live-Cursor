@@ -31,7 +31,28 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtinModules],
+		"child_process",
+		"fs",
+		"path",
+		"os",
+		"crypto",
+		"net",
+		"tls",
+		"http",
+		"https"
+	],
+	alias: {
+		"process": "process",
+		"buffer": "buffer",
+		"events": "events",
+		"stream": "stream-browserify",
+		"util": "util"
+	},
+	inject: ["./process-shim.js"],
+	define: {
+		"process.env.NODE_ENV": '"production"',
+		"global": "window"
+	},
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",

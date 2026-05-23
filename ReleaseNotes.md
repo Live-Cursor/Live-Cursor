@@ -1,11 +1,11 @@
-# Live Cursor v1.1.0 Release Notes
+# Live Cursor v1.2.0 Release Notes
 
 Welcome to the biggest update to Live Cursor since launch! We've listened to your feedback and completely revolutionized how synchronization works on mobile devices while drastically simplifying the user interface.
 
 ## Mobile WebRTC Mesh (New Feature!)
 Mobile devices (iOS/Android) historically struggled with hosting background sync servers due to OS restrictions. **No more.**
-- **True P2P Mesh:** Live Cursor now natively implements `y-webrtc`. You can now select **WebRTC P2P (Mobile Friendly)** mode from the settings to instantly create a serverless sync room. 
-- **Serverless Config Sync:** The vault configuration syncing engine has been entirely rewritten. You can now sync your Obsidian themes, plugins, and settings *directly from your phone* over decentralized WebRTC data channels!
+- **True P2P Mesh:** Live Cursor now natively implements `y-webrtc`. You can now select **WebRTC P2P (Mobile Friendly)** mode from the settings to instantly create a persistent, background serverless sync room. 
+- **Full Vault Sync Engine:** The syncing engine has been entirely rewritten. You can now sync your ENTIRE vault (every single `.md` note, not just your settings) *directly from your phone* over decentralized WebRTC data channels! Just click "Sync Entire Vault"!
 
 ## Completely Redesigned UI
 The settings panel has been rebuilt from the ground up to be ultra-intuitive for everyday users:

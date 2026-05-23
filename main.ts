@@ -232,7 +232,7 @@ export default class LiveCursorPlugin extends Plugin {
     let sync = this.activeSyncs.get(file.path);
 
     if (!sync) {
-      if (!this.settings.serverUrl || !this.settings.username || !this.settings.passwordHash) {
+      if (this.settings.syncMode !== 'webrtc' && (!this.settings.serverUrl || !this.settings.username || !this.settings.passwordHash)) {
         return; // Missing settings
       }
 
@@ -242,14 +242,25 @@ export default class LiveCursorPlugin extends Plugin {
 
       const roomName = encodeURIComponent(file.path);
       
-      // Y-Websocket appends roomName to the URL. We must pass auth via params.
-      const provider = new WebsocketProvider(this.settings.serverUrl, roomName, doc, {
-        connect: true,
-        params: {
-          user: this.settings.username,
-          pass: this.settings.passwordHash
+      let provider: any;
+      if (this.settings.syncMode === 'webrtc') {
+        const fullRoomName = `${this.settings.webrtcRoomName}-${roomName}`;
+        const providerOptions: any = {
+          signaling: ['wss://signaling.yjs.dev']
+        };
+        if (this.settings.webrtcPassword) {
+          providerOptions.password = this.settings.webrtcPassword;
         }
-      });
+        provider = new WebrtcProvider(fullRoomName, doc, providerOptions);
+      } else {
+        provider = new WebsocketProvider(this.settings.serverUrl, roomName, doc, {
+          connect: true,
+          params: {
+            user: this.settings.username,
+            pass: this.settings.passwordHash
+          }
+        });
+      }
 
       // Dynamic collaborator profile injection for Live Cursors
       provider.awareness.setLocalStateField('user', {

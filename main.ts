@@ -211,6 +211,36 @@ export default class LiveCursorPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.startVaultSyncMesh();
+  }
+
+  public startVaultSyncMesh() {
+    if (this.settings.syncMode !== 'webrtc' || !this.settings.webrtcRoomName) {
+      if (this.vaultSyncProvider) {
+        this.vaultSyncProvider.disconnect();
+        this.vaultSyncProvider = null;
+      }
+      if (this.vaultSyncDoc) {
+        this.vaultSyncDoc.destroy();
+        this.vaultSyncDoc = null;
+      }
+      return;
+    }
+
+    if (!this.vaultSyncProvider) {
+      console.log('[LiveCursor] Starting persistent WebRTC mesh for Vault Sync');
+      this.vaultSyncDoc = new Y.Doc();
+      const providerOptions: any = {
+        signaling: ['wss://signaling.yjs.dev']
+      };
+      if (this.settings.webrtcPassword) {
+        providerOptions.password = this.settings.webrtcPassword;
+      }
+      this.vaultSyncProvider = new WebrtcProvider(`vault-mesh-${this.settings.webrtcRoomName}`, this.vaultSyncDoc, providerOptions);
+      this.vaultSyncProvider.on('status', (event: any) => {
+        console.log('[LiveCursor] Vault Mesh Status:', event.status);
+      });
+    }
   }
 
   private configureEditorForFile(file: TFile) {
@@ -571,7 +601,7 @@ class LiveCursorSettingTab extends PluginSettingTab {
       
     new Setting(card)
       .addButton(btn => btn
-        .setButtonText('Sync Vault Configs')
+        .setButtonText('Sync Entire Vault')
         .setCta()
         .onClick(async () => {
           const engine = new ConfigSyncEngine(
@@ -582,8 +612,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
             this.plugin.settings.workspaceName
           );
           btn.setButtonText('Syncing...');
-          await engine.syncConfigViaWebrtc(this.plugin.settings.webrtcRoomName, this.plugin.settings.webrtcPassword);
-          btn.setButtonText('Sync Vault Configs');
+          await engine.syncConfigViaWebrtc(this.plugin.vaultSyncDoc);
+          btn.setButtonText('Sync Entire Vault');
         }));
   }
 }

@@ -67,13 +67,14 @@ export class ConfigSyncEngine {
   }
 
   private async ensureDirExists(relPath: string, configDir: string) {
-    if (!(await this.app.vault.adapter.exists(configDir))) {
+    if (configDir && !(await this.app.vault.adapter.exists(configDir))) {
       await this.app.vault.adapter.mkdir(configDir);
     }
     const parts = relPath.split('/');
     let cur = configDir;
     for (let i = 0; i < parts.length - 1; i++) {
-      cur += '/' + parts[i];
+      const part = parts[i] as string;
+      cur = cur ? cur + '/' + part : part;
       if (!(await this.app.vault.adapter.exists(cur))) {
         await this.app.vault.adapter.mkdir(cur);
       }
@@ -226,15 +227,15 @@ export class ConfigSyncEngine {
     }
   }
 
-  public async syncConfigViaWebrtc(roomName: string, password?: string) {
+  public async syncConfigViaWebrtc(doc: any) {
     new Notice('Syncing full vault via WebRTC Mesh...');
     
     try {
-      const doc = (this.plugin as any).vaultSyncDoc;
       if (!doc) {
          new Notice('WebRTC mesh not connected yet. Check settings.');
          return;
       }
+      const configDir = '';
       
       const manifestMap = doc.getMap('manifest');
       const filesMap = doc.getMap('files');
@@ -287,7 +288,7 @@ export class ConfigSyncEngine {
       for (const relPath of allPaths) {
         const local = localMap.get(relPath);
         const remote = remoteManifest[relPath];
-        const fullLocalPath = `${configDir}/${relPath}`;
+        const fullLocalPath = configDir ? `${configDir}/${relPath}` : relPath;
 
         if (local && !remote) {
           // File exists only locally -> Upload to mesh

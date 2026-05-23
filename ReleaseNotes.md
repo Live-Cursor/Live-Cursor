@@ -1,4 +1,7 @@
-# Live Cursor v1.1.5 Release Notes
+# Live Cursor v1.1.6 Release Notes
+
+**v1.1.6 Hotfixes:**
+- **Invisible Folders Bug Fix:** When the sync engine received a completely new nested folder structure (like `Sync Conflicts/Local/`), it was accidentally creating the folders invisibly on the hard drive using the lowest level adapter, bypassing Obsidian's File Explorer cache. This has been patched, and folders are now instantly rendered in your file tree as they arrive!
 
 **v1.1.5 Feature Upgrades:**
 - **Human Readable Conflicts:** When file sync conflicts occur, the conflicting files are now intelligently separated into `Sync Conflicts/Local/` and `Sync Conflicts/Remote/` folders. Crucially, they perfectly retain their original `.md` extensions and nested folder structures, so you can easily browse, read, and merge them natively inside the Obsidian UI!

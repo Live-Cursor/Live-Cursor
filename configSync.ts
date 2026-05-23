@@ -77,16 +77,16 @@ export class ConfigSyncEngine {
   }
 
   private async ensureDirExists(relPath: string, configDir: string) {
-    if (configDir && !(await this.app.vault.adapter.exists(configDir))) {
-      await this.app.vault.adapter.mkdir(configDir);
+    if (configDir && !this.app.vault.getAbstractFileByPath(configDir)) {
+      await this.app.vault.createFolder(configDir).catch(() => {});
     }
     const parts = relPath.split('/');
     let cur = configDir;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i] as string;
       cur = cur ? cur + '/' + part : part;
-      if (!(await this.app.vault.adapter.exists(cur))) {
-        await this.app.vault.adapter.mkdir(cur);
+      if (!this.app.vault.getAbstractFileByPath(cur)) {
+        await this.app.vault.createFolder(cur).catch(() => {});
       }
     }
   }

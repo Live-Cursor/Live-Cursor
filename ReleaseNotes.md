@@ -1,6 +1,9 @@
-# Live Cursor v1.1.3 Release Notes
+# Live Cursor v1.1.4 Release Notes
 
-**v1.1.3 Hotfixes & Feature Upgrades:**
+**v1.1.4 Hotfixes:**
+- **UI Visibility Fix:** Files downloaded from the WebRTC Mesh now instantly appear in the Obsidian File Explorer UI! Previously, the engine used a low-level disk adapter which bypassed Obsidian's indexing cache, requiring a restart to see the files.
+
+**v1.1.3 Feature Upgrades:**
 - **Full Vault Sync Engine:** The syncing engine has been entirely rewritten. You can now sync your ENTIRE vault (every single `.md` note, not just your settings) *directly from your phone* over decentralized WebRTC data channels! Just click "Sync Entire Vault"!
 - Resolved a critical silent TypeScript bug in the Full Vault Sync engine that would have caused crashes during initial peer connections.
 - Strict compiler enforcement (`tsc --noEmit`) added to the build pipeline for ironclad stability.

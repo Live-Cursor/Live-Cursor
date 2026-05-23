@@ -66,6 +66,16 @@ export class ConfigSyncEngine {
     return res.arrayBuffer;
   }
 
+
+  private async writeToVaultUI(relPath: string, data: ArrayBuffer) {
+    const file = this.app.vault.getAbstractFileByPath(relPath);
+    if (file) {
+      await this.app.vault.modifyBinary(file as any, data);
+    } else {
+      await this.app.vault.createBinary(relPath, data);
+    }
+  }
+
   private async ensureDirExists(relPath: string, configDir: string) {
     if (configDir && !(await this.app.vault.adapter.exists(configDir))) {
       await this.app.vault.adapter.mkdir(configDir);
@@ -138,7 +148,7 @@ export class ConfigSyncEngine {
           // File exists only remotely -> Download
           await this.ensureDirExists(relPath, '');
           const data = await this.downloadFile(relPath);
-          await this.app.vault.adapter.writeBinary(fullLocalPath, data);
+          await this.writeToVaultUI(relPath, data);
           actionsCount++;
         } else if (local && remote) {
           // File exists in both -> Check for modification differences
@@ -166,7 +176,7 @@ export class ConfigSyncEngine {
               if (local.stat.mtime > remote.mtime) {
                 await this.uploadFile(relPath, localData, local.stat.mtime);
               } else {
-                await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                await this.writeToVaultUI(relPath, remoteData);
               }
             } else {
               // Conflict: Contents are different and timestamps differ.
@@ -185,7 +195,7 @@ export class ConfigSyncEngine {
                   const mergedMtime = Math.max(local.stat.mtime, remote.mtime);
 
                   // Save merged file locally and upload to remote
-                  await this.app.vault.adapter.writeBinary(fullLocalPath, mergedData);
+                  await this.writeToVaultUI(relPath, mergedData);
                   await this.uploadFile(relPath, mergedData, mergedMtime);
                   actionsCount++;
                   console.log(`[LiveCursor] Automatically merged JSON conflict for config file: ${relPath}`);
@@ -194,13 +204,13 @@ export class ConfigSyncEngine {
                   console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
                   const conflictDir = 'Sync Conflicts';
                   await this.ensureDirExists(relPath, conflictDir);
-                  await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.local.bak`, localData);
-                  await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.remote.bak`, remoteData);
+                  await this.writeToVaultUI(`${conflictDir}/${relPath}.local.bak`, localData);
+                  await this.writeToVaultUI(`${conflictDir}/${relPath}.remote.bak`, remoteData);
 
                   if (local.stat.mtime > remote.mtime) {
                     await this.uploadFile(relPath, localData, local.stat.mtime);
                   } else {
-                    await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                    await this.writeToVaultUI(relPath, remoteData);
                   }
                   actionsCount++;
                 }
@@ -208,13 +218,13 @@ export class ConfigSyncEngine {
                 // Non-JSON files: Resolve silently via latest modification time (mtime)
                 const conflictDir = 'Sync Conflicts';
                 await this.ensureDirExists(relPath, conflictDir);
-                await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.local.bak`, localData);
-                await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.remote.bak`, remoteData);
+                await this.writeToVaultUI(`${conflictDir}/${relPath}.local.bak`, localData);
+                await this.writeToVaultUI(`${conflictDir}/${relPath}.remote.bak`, remoteData);
 
                 if (local.stat.mtime > remote.mtime) {
                   await this.uploadFile(relPath, localData, local.stat.mtime);
                 } else {
-                  await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                  await this.writeToVaultUI(relPath, remoteData);
                 }
                 actionsCount++;
               }
@@ -278,6 +288,7 @@ export class ConfigSyncEngine {
 
       let actionsCount = 0;
 
+
       const uploadFileFn = async (relPath: string, data: ArrayBuffer, mtime: number) => {
         filesMap.set(relPath, new Uint8Array(data));
         manifestMap.set(relPath, { size: data.byteLength, mtime });
@@ -303,7 +314,7 @@ export class ConfigSyncEngine {
           // File exists only remotely -> Download from mesh
           await this.ensureDirExists(relPath, '');
           const data = await downloadFileFn(relPath);
-          await this.app.vault.adapter.writeBinary(fullLocalPath, data);
+          await this.writeToVaultUI(relPath, data);
           actionsCount++;
         } else if (local && remote) {
           // File exists in both -> Check for modification differences
@@ -328,10 +339,10 @@ export class ConfigSyncEngine {
             }
 
             if (contentsMatch) {
+              // Contents are identical. Do NOT write to disk to avoid mtime bounce.
+              // Just update the mesh manifest silently so timestamps match.
               if (local.stat.mtime > remote.mtime) {
                 await uploadFileFn(relPath, localData, local.stat.mtime);
-              } else {
-                await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
               }
             } else {
               // Conflict: Contents are different and timestamps differ.
@@ -350,7 +361,7 @@ export class ConfigSyncEngine {
                   const mergedMtime = Math.max(local.stat.mtime, remote.mtime);
 
                   // Save merged file locally and upload to remote
-                  await this.app.vault.adapter.writeBinary(fullLocalPath, mergedData);
+                  await this.writeToVaultUI(relPath, mergedData);
                   await uploadFileFn(relPath, mergedData, mergedMtime);
                   actionsCount++;
                   console.log(`[LiveCursor] Automatically merged JSON conflict for config file: ${relPath}`);
@@ -359,13 +370,13 @@ export class ConfigSyncEngine {
                   console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
                   const conflictDir = 'Sync Conflicts';
                   await this.ensureDirExists(relPath, conflictDir);
-                  await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.local.bak`, localData);
-                  await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.remote.bak`, remoteData);
+                  await this.writeToVaultUI(`${conflictDir}/${relPath}.local.bak`, localData);
+                  await this.writeToVaultUI(`${conflictDir}/${relPath}.remote.bak`, remoteData);
 
                   if (local.stat.mtime > remote.mtime) {
                     await uploadFileFn(relPath, localData, local.stat.mtime);
                   } else {
-                    await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                    await this.writeToVaultUI(relPath, remoteData);
                   }
                   actionsCount++;
                 }
@@ -373,13 +384,13 @@ export class ConfigSyncEngine {
                 // Non-JSON files: Resolve silently via latest modification time (mtime)
                 const conflictDir = 'Sync Conflicts';
                 await this.ensureDirExists(relPath, conflictDir);
-                await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.local.bak`, localData);
-                await this.app.vault.adapter.writeBinary(`${conflictDir}/${relPath}.remote.bak`, remoteData);
+                await this.writeToVaultUI(`${conflictDir}/${relPath}.local.bak`, localData);
+                await this.writeToVaultUI(`${conflictDir}/${relPath}.remote.bak`, remoteData);
 
                 if (local.stat.mtime > remote.mtime) {
                   await uploadFileFn(relPath, localData, local.stat.mtime);
                 } else {
-                  await this.app.vault.adapter.writeBinary(fullLocalPath, remoteData);
+                  await this.writeToVaultUI(relPath, remoteData);
                 }
                 actionsCount++;
               }

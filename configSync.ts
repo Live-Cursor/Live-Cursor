@@ -118,7 +118,10 @@ export class ConfigSyncEngine {
         ...Object.keys(remoteManifest)
       ]);
 
+            new Notice(`Found ${localFiles.length} local files. Comparing with mesh...`, 3000);
       let actionsCount = 0;
+      let downloadCount = 0;
+      let uploadCount = 0;
 
       for (const relPath of allPaths) {
         const local = localMap.get(relPath);
@@ -130,9 +133,10 @@ export class ConfigSyncEngine {
           const data = await this.app.vault.adapter.readBinary(local.path);
           await this.uploadFile(relPath, data, local.stat.mtime);
           actionsCount++;
+          uploadCount++;
         } else if (!local && remote) {
           // File exists only remotely -> Download
-          await this.ensureDirExists(relPath, configDir);
+          await this.ensureDirExists(relPath, '');
           const data = await this.downloadFile(relPath);
           await this.app.vault.adapter.writeBinary(fullLocalPath, data);
           actionsCount++;
@@ -228,7 +232,7 @@ export class ConfigSyncEngine {
   }
 
   public async syncConfigViaWebrtc(doc: any) {
-    new Notice('Syncing full vault via WebRTC Mesh...');
+    new Notice('Syncing full vault via WebRTC Mesh...', 5000);
     
     try {
       if (!doc) {
@@ -257,7 +261,7 @@ export class ConfigSyncEngine {
         }
       };
 
-      await scanDir('/');
+      await scanDir('');
 
       // Map local files by relative path for unified syncing
       const localMap = new Map<string, { path: string, stat: any }>();
@@ -288,7 +292,7 @@ export class ConfigSyncEngine {
       for (const relPath of allPaths) {
         const local = localMap.get(relPath);
         const remote = remoteManifest[relPath];
-        const fullLocalPath = configDir ? `${configDir}/${relPath}` : relPath;
+        const fullLocalPath = relPath;
 
         if (local && !remote) {
           // File exists only locally -> Upload to mesh
@@ -297,7 +301,7 @@ export class ConfigSyncEngine {
           actionsCount++;
         } else if (!local && remote) {
           // File exists only remotely -> Download from mesh
-          await this.ensureDirExists(relPath, configDir);
+          await this.ensureDirExists(relPath, '');
           const data = await downloadFileFn(relPath);
           await this.app.vault.adapter.writeBinary(fullLocalPath, data);
           actionsCount++;
@@ -384,7 +388,7 @@ export class ConfigSyncEngine {
         }
       }
 
-      new Notice(actionsCount > 0 ? 'Mesh Configurations updated successfully!' : 'Mesh Configurations in sync.');
+      new Notice(actionsCount > 0 ? `Mesh Sync: ${actionsCount} files updated!` : 'Vault is completely in sync!');
       
 
       
@@ -393,5 +397,22 @@ export class ConfigSyncEngine {
       new Notice(`Mesh Sync completed (standby).`);
     }
   }
-}
 
+  public setupBackgroundListener(doc: any) {
+    if (!doc) return;
+    const manifestMap = doc.getMap('manifest');
+    manifestMap.observe(async (event: any) => {
+      // Ignore local changes
+      if (event.transaction.local) return;
+      
+      console.log('[LiveCursor] Remote vault manifest changed. Automatically syncing...');
+      new Notice('Incoming files from WebRTC Mesh...', 3000);
+      try {
+        await this.syncConfigViaWebrtc(doc);
+      } catch (e) {
+        console.error('[LiveCursor] Background Sync Error:', e);
+      }
+    });
+  }
+
+}

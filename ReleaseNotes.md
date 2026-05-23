@@ -1,6 +1,6 @@
-# Live Cursor v1.1.2 Release Notes
+# Live Cursor v1.1.3 Release Notes
 
-**v1.1.2 Hotfixes & Feature Upgrades:**
+**v1.1.3 Hotfixes & Feature Upgrades:**
 - **Full Vault Sync Engine:** The syncing engine has been entirely rewritten. You can now sync your ENTIRE vault (every single `.md` note, not just your settings) *directly from your phone* over decentralized WebRTC data channels! Just click "Sync Entire Vault"!
 - Resolved a critical silent TypeScript bug in the Full Vault Sync engine that would have caused crashes during initial peer connections.
 - Strict compiler enforcement (`tsc --noEmit`) added to the build pipeline for ironclad stability.

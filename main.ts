@@ -1,5 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, MarkdownView, Modal, Notice, requestUrl } from 'obsidian';
 import { WebsocketProvider } from 'y-websocket';
+import { WebrtcProvider } from 'y-webrtc';
 import * as Y from 'yjs';
 import { yCollab } from 'y-codemirror.next';
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
@@ -18,6 +19,10 @@ interface LiveCursorSettings {
   autoSyncOnLoad: boolean;
   nickname: string;
   cursorColor: string;
+  syncMode: 'cloud' | 'local' | 'webrtc';
+  webrtcRoomName: string;
+  webrtcPassword: string;
+  lastVersion: string;
 }
 
 const DEFAULT_SETTINGS: LiveCursorSettings = {
@@ -29,16 +34,28 @@ const DEFAULT_SETTINGS: LiveCursorSettings = {
   debugLogging: false,
   autoSyncOnLoad: false,
   nickname: '',
-  cursorColor: '#6366f1' // Sleek Indigo accent
+  cursorColor: '#6366f1',
+  syncMode: 'local',
+  webrtcRoomName: 'default-mesh-room',
+  webrtcPassword: '',
+  lastVersion: '0.0.0'
 }
 
 export default class LiveCursorPlugin extends Plugin {
   settings!: LiveCursorSettings;
-  private activeSyncs: Map<string, { doc: Y.Doc, provider: WebsocketProvider }> = new Map();
+  private activeSyncs: Map<string, { doc: Y.Doc, provider: any }> = new Map();
   private editorExtensions: Extension[] = [];
 
   async onload() {
     await this.loadSettings();
+
+    if (this.settings.lastVersion !== '1.1.0') {
+      setTimeout(() => {
+        new Notice('Welcome to Live Cursor v1.1.0!\n\nNew Feature: Mobile WebRTC Sync! You can now host servers directly from your phone.', 10000);
+      }, 2000);
+      this.settings.lastVersion = '1.1.0';
+      await this.saveSettings();
+    }
 
     this.addSettingTab(new LiveCursorSettingTab(this.app, this));
 
@@ -291,6 +308,7 @@ export default class LiveCursorPlugin extends Plugin {
   }
 }
 
+
 class LiveCursorSettingTab extends PluginSettingTab {
   plugin: LiveCursorPlugin;
 
@@ -303,7 +321,6 @@ class LiveCursorSettingTab extends PluginSettingTab {
     const {containerEl} = this;
     containerEl.empty();
 
-    // 1. Premium Header
     const header = containerEl.createEl('div');
     header.style.marginBottom = '24px';
     const title = header.createEl('h2', {text: 'Live Cursor Collaboration'});
@@ -318,216 +335,38 @@ class LiveCursorSettingTab extends PluginSettingTab {
     subtitle.style.color = 'var(--text-muted)';
     subtitle.style.fontSize = '13px';
 
-    const isConfigured = this.plugin.settings.username && this.plugin.settings.passwordHash && this.plugin.settings.serverUrl;
+    containerEl.createEl('h3', { text: 'Connection Mode' });
+    const modeContainer = containerEl.createEl('div');
+    modeContainer.style.display = 'flex';
+    modeContainer.style.gap = '10px';
+    modeContainer.style.marginBottom = '24px';
 
-    // 2. Onboarding Setup Card (Unconfigured State)
-    if (!isConfigured) {
-      const card = containerEl.createEl('div');
-      card.style.background = 'var(--background-secondary)';
-      card.style.border = '1px solid var(--text-accent)';
-      card.style.borderRadius = '8px';
-      card.style.padding = '20px';
-      card.style.marginBottom = '24px';
-      card.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)';
+    const modes = [
+      { id: 'local', name: 'Host Local (LAN/Tailscale)' },
+      { id: 'cloud', name: 'Cloud Server' },
+      { id: 'webrtc', name: 'WebRTC P2P (Mobile Friendly)' }
+    ];
 
-      const cardTitle = card.createEl('h3', { text: 'Setup Connection' });
-      cardTitle.style.marginTop = '0';
-      cardTitle.style.marginBottom = '8px';
-      cardTitle.style.fontSize = '16px';
-      cardTitle.style.color = 'var(--text-normal)';
-
-      const cardDesc = card.createEl('p', { text: 'To begin, enter your credentials and the server address. If you are starting fresh, these will automatically be registered as your main security credentials.' });
-      cardDesc.style.margin = '0 0 20px 0';
-      cardDesc.style.fontSize = '12px';
-      cardDesc.style.color = 'var(--text-muted)';
-
-      let tempUser = this.plugin.settings.username || '';
-      let tempPass = this.plugin.settings.passwordHash || '';
-      let tempUrl = this.plugin.settings.serverUrl || 'ws://localhost:1234/sync';
-
-      new Setting(card)
-        .setName('Username')
-        .setDesc('Choose a username for your sync profile.')
-        .addText(text => text
-          .setPlaceholder('e.g. Alice')
-          .setValue(tempUser)
-          .onChange(v => tempUser = v));
-
-      new Setting(card)
-        .setName('Password')
-        .setDesc('Enter a secure password.')
-        .addText(text => text
-          .setPlaceholder('Enter secure password')
-          .setValue(tempPass)
-          .onChange(v => tempPass = v));
-
-      new Setting(card)
-        .setName('Server URL')
-        .setDesc('Use the local background daemon or your custom cloud server address.')
-        .addText(text => text
-          .setPlaceholder('ws://localhost:1234/sync')
-          .setValue(tempUrl)
-          .onChange(v => tempUrl = v));
-
-      const btnContainer = card.createEl('div');
-      btnContainer.style.display = 'flex';
-      btnContainer.style.justifyContent = 'flex-end';
-      btnContainer.style.marginTop = '20px';
-
-      const connectBtn = btnContainer.createEl('button', { text: 'Connect & Sync' });
-      connectBtn.addClass('mod-cta');
-      connectBtn.style.padding = '8px 18px';
-      connectBtn.style.fontSize = '13px';
-      connectBtn.style.fontWeight = 'bold';
-      connectBtn.style.borderRadius = '5px';
-
-      connectBtn.addEventListener('click', async () => {
-        if (!tempUser || !tempPass) {
-          new Notice('Please fill in both Username and Password.');
-          return;
-        }
-
-        let targetUrl = tempUrl.trim();
-        if (!targetUrl) {
-          targetUrl = 'ws://localhost:1234/sync';
-        }
-        if (!targetUrl.startsWith('ws://') && !targetUrl.startsWith('wss://')) {
-          targetUrl = `ws://${targetUrl}`;
-        }
-        if (!targetUrl.endsWith('/sync') && !targetUrl.includes('/sync/')) {
-          targetUrl = targetUrl.replace(/\/+$/, '') + '/sync';
-        }
-
-        this.plugin.settings.serverUrl = targetUrl;
+    modes.forEach(m => {
+      const btn = modeContainer.createEl('button', { text: m.name });
+      if (this.plugin.settings.syncMode === m.id) {
+        btn.addClass('mod-cta');
+      }
+      btn.addEventListener('click', async () => {
+        this.plugin.settings.syncMode = m.id as any;
         await this.plugin.saveSettings();
-
-        new Notice('Initializing sync environment...');
-
-        // Auto-launch local server daemon if local address
-        const isLocal = targetUrl.includes('localhost') || targetUrl.includes('127.0.0.1');
-        if (isLocal && !this.plugin.daemonProcess) {
-          const launched = await this.plugin.startDaemon();
-          if (launched) {
-            new Notice('Local background sync server launched!');
-          }
-        }
-
-        try {
-          const httpUrl = targetUrl.replace(/^ws/, 'http').replace(/\/sync\/?$/, '');
-          const checkUrl = `${httpUrl}/api/admin-exists`;
-          
-          let userExists = false;
-          try {
-            const checkRes = await requestUrl({ url: checkUrl, method: 'GET' });
-            if (checkRes.status === 200) {
-              userExists = checkRes.json.exists;
-            }
-          } catch (e) {
-            console.log('Admin check failed, DB might be empty:', e);
-          }
-
-          if (!userExists) {
-            // Auto register fresh user as the primary credentials
-            const registerUrl = `${httpUrl}/api/admin/create-user?user=${encodeURIComponent(tempUser)}&pass=${encodeURIComponent(tempPass)}&new_user=${encodeURIComponent(tempUser)}&new_pass=${encodeURIComponent(tempPass)}`;
-            await requestUrl({ url: registerUrl, method: 'POST' });
-          }
-
-          this.plugin.settings.username = tempUser;
-          this.plugin.settings.passwordHash = tempPass;
-          this.plugin.settings.nickname = tempUser;
-          await this.plugin.saveSettings();
-
-          new Notice('Setup complete! Connected to collaboration sync.');
-          this.display();
-        } catch (err: any) {
-          this.plugin.settings.username = tempUser;
-          this.plugin.settings.passwordHash = tempPass;
-          await this.plugin.saveSettings();
-          new Notice(`Credentials saved. Connecting...`);
-          this.display();
-        }
-      });
-    }
-
-    // 3. Active Connection Card (Configured State)
-    if (isConfigured) {
-      const activeCard = containerEl.createEl('div');
-      activeCard.style.background = 'var(--background-secondary)';
-      activeCard.style.border = '1px solid var(--color-green, #10b981)';
-      activeCard.style.borderRadius = '8px';
-      activeCard.style.padding = '20px';
-      activeCard.style.marginBottom = '24px';
-      activeCard.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.05)';
-
-      const cardHeader = activeCard.createEl('div');
-      cardHeader.style.display = 'flex';
-      cardHeader.style.justifyContent = 'space-between';
-      cardHeader.style.alignItems = 'center';
-      cardHeader.style.marginBottom = '12px';
-
-      const cardTitle = cardHeader.createEl('h3', { text: 'Active Connection' });
-      cardTitle.style.margin = '0';
-      cardTitle.style.fontSize = '15px';
-
-      const statusBadge = cardHeader.createEl('span', { text: '● Live Syncing' });
-      statusBadge.style.color = '#10b981';
-      statusBadge.style.fontWeight = 'bold';
-      statusBadge.style.fontSize = '12px';
-      statusBadge.style.background = 'rgba(16, 185, 129, 0.1)';
-      statusBadge.style.padding = '3px 8px';
-      statusBadge.style.borderRadius = '20px';
-
-      const detailsContainer = activeCard.createEl('div');
-      detailsContainer.style.fontSize = '13px';
-      detailsContainer.style.color = 'var(--text-muted)';
-      detailsContainer.style.marginBottom = '20px';
-
-      const serverLine = detailsContainer.createEl('div');
-      serverLine.innerHTML = `<strong>Server:</strong> ${this.plugin.settings.serverUrl}`;
-      serverLine.style.marginBottom = '4px';
-
-      const userLine = detailsContainer.createEl('div');
-      userLine.innerHTML = `<strong>User:</strong> ${this.plugin.settings.username}`;
-
-      const actionRow = activeCard.createEl('div');
-      actionRow.style.display = 'flex';
-      actionRow.style.gap = '10px';
-
-      const syncBtn = actionRow.createEl('button', { text: 'Sync Vault Settings' });
-      syncBtn.addClass('mod-cta');
-      syncBtn.style.padding = '6px 14px';
-      syncBtn.style.fontSize = '12px';
-      syncBtn.style.borderRadius = '4px';
-      syncBtn.addEventListener('click', async () => {
-        syncBtn.setDisabled(true);
-        syncBtn.setButtonText('Syncing...');
-        const engine = new ConfigSyncEngine(
-          this.plugin.app,
-          this.plugin.settings.serverUrl,
-          this.plugin.settings.username,
-          this.plugin.settings.passwordHash,
-          this.plugin.settings.workspaceName
-        );
-        await engine.syncConfig();
-        syncBtn.setDisabled(false);
-        syncBtn.setButtonText('Sync Vault Settings');
-      });
-
-      const disconnectBtn = actionRow.createEl('button', { text: 'Disconnect' });
-      disconnectBtn.style.padding = '6px 14px';
-      disconnectBtn.style.fontSize = '12px';
-      disconnectBtn.style.borderRadius = '4px';
-      disconnectBtn.addEventListener('click', async () => {
-        this.plugin.settings.username = '';
-        this.plugin.settings.passwordHash = '';
-        this.plugin.settings.serverUrl = '';
-        await this.plugin.saveSettings();
-        new Notice('Disconnected sync environment.');
         this.display();
       });
+    });
+
+    if (this.plugin.settings.syncMode === 'local') {
+      this.renderLocalMode(containerEl);
+    } else if (this.plugin.settings.syncMode === 'cloud') {
+      this.renderCloudMode(containerEl);
+    } else if (this.plugin.settings.syncMode === 'webrtc') {
+      this.renderWebrtcMode(containerEl);
     }
 
-    // 4. Collaborator Profile
     containerEl.createEl('h3', {text: 'Collaborator Profile'});
     
     new Setting(containerEl)
@@ -550,148 +389,189 @@ class LiveCursorSettingTab extends PluginSettingTab {
           this.plugin.settings.cursorColor = val;
           await this.plugin.saveSettings();
         }));
+  }
 
-    // 5. Collapsible Advanced Technical Settings (Power User Controls)
-    containerEl.createEl('br');
-    
-    const details = containerEl.createEl('details');
-    details.style.border = '1px solid var(--border-color)';
-    details.style.borderRadius = '6px';
-    details.style.padding = '12px';
-    details.style.background = 'var(--background-primary)';
-    
-    const summary = details.createEl('summary', { text: 'Advanced Developer Settings' });
-    summary.style.fontWeight = 'bold';
-    summary.style.cursor = 'pointer';
-    summary.style.color = 'var(--text-muted)';
-    summary.style.fontSize = '13px';
-    summary.style.outline = 'none';
+  renderLocalMode(containerEl: HTMLElement) {
+    const card = containerEl.createEl('div');
+    card.style.background = 'var(--background-secondary)';
+    card.style.padding = '20px';
+    card.style.borderRadius = '8px';
+    card.style.marginBottom = '24px';
+    card.style.border = '1px solid var(--text-accent)';
 
-    const advancedContainer = details.createEl('div');
-    advancedContainer.style.marginTop = '12px';
+    card.createEl('h3', { text: 'Local Network Hosting', attr: { style: 'margin-top: 0;' } });
+    card.createEl('p', { text: 'Host a sync session directly on this computer. Other devices on your Wi-Fi or Tailscale network can join using the IPs below.', attr: { style: 'font-size: 13px; color: var(--text-muted); margin-bottom: 16px;' } });
 
-    // Local background server control
-    const daemonStatusText = this.plugin.daemonProcess 
-      ? 'Local background daemon is running on port 1234.' 
-      : 'Local background daemon is offline.';
+    const isRunning = !!this.plugin.daemonProcess;
 
-    const daemonSetting = new Setting(advancedContainer)
-      .setName('Local Background Daemon')
-      .setDesc(daemonStatusText);
+    const statusEl = card.createEl('div');
+    statusEl.style.marginBottom = '16px';
+    statusEl.innerHTML = `<strong>Status:</strong> <span style="color: ${isRunning ? '#10b981' : 'var(--text-error)'}">${isRunning ? '● Active' : '○ Offline'}</span>`;
 
-    if (this.plugin.daemonProcess) {
-      daemonSetting.addButton(btn => btn
-        .setButtonText('Stop Server')
-        .onClick(() => {
-          this.plugin.stopDaemon();
-          this.display();
-        }));
-    } else {
-      daemonSetting.addButton(btn => btn
-        .setButtonText('Start Server')
-        .onClick(async () => {
-          const started = await this.plugin.startDaemon();
-          if (started) this.display();
-        }));
-    }
+    if (isRunning) {
+      let localIps: string[] = [];
+      try {
+        const os = (window as any).require('os');
+        const interfaces = os.networkInterfaces();
+        for (const name of Object.keys(interfaces)) {
+          for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+              localIps.push(iface.address);
+            }
+          }
+        }
+      } catch {
+        // Not on desktop
+      }
 
-    new Setting(advancedContainer)
-      .setName('Credential Portals')
-      .setDesc('Explicitly select role portals for diagnostic logging.')
-      .addButton(btn => btn
-        .setButtonText('Open Portal')
-        .onClick(() => {
-          new RoleSelectionModal(this.app, this.plugin, this).open();
-        }));
+      if (localIps.length > 0) {
+        card.createEl('strong', { text: 'Connect other devices to:' });
+        const ipList = card.createEl('ul');
+        ipList.style.marginTop = '8px';
+        ipList.style.fontSize = '14px';
+        ipList.style.fontFamily = 'monospace';
+        
+        localIps.forEach(ip => {
+          ipList.createEl('li', { text: `ws://${ip}:1234/sync` });
+        });
+        
+        card.createEl('p', { text: 'Make sure your Username and Password exactly match on joining devices.', attr: { style: 'font-size: 12px; color: var(--text-muted); margin-top: 12px;' } });
+      }
 
-    new Setting(advancedContainer)
-      .setName('Self-Host Docker Compose')
-      .setDesc('Generate copy-paste docker compose clusters.')
-      .addButton(btn => btn
-        .setButtonText('Generate Compose')
-        .onClick(() => {
-          new CreateServerModal(this.app).open();
-        }));
-
-    if (this.plugin.settings.username === 'admin') {
-      new Setting(advancedContainer)
-        .setName('Telemetry Dashboard')
-        .setDesc('Diagnostics, active rooms, memory utilization, and users.')
+      new Setting(card)
         .addButton(btn => btn
-          .setButtonText('Launch Dashboard')
+          .setButtonText('Sync Vault Configs')
+          .onClick(async () => {
+            const engine = new ConfigSyncEngine(
+              this.plugin.app,
+              this.plugin.settings.serverUrl,
+              this.plugin.settings.username,
+              this.plugin.settings.passwordHash,
+              this.plugin.settings.workspaceName
+            );
+            btn.setButtonText('Syncing...');
+            await engine.syncConfig();
+            btn.setButtonText('Sync Vault Configs');
+          }))
+        .addButton(btn => btn
+          .setButtonText('Stop Host')
           .onClick(() => {
-            new AdminConsoleModal(this.app, this.plugin).open();
-          }));
-    }
-
-    new Setting(advancedContainer)
-      .setName('Developer Direct Inputs')
-      .setDesc('Explicitly toggle low-level environment modifications.')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.devMode)
-        .onChange(async (value) => {
-          this.plugin.settings.devMode = value;
-          await this.plugin.saveSettings();
-          this.display();
-        }));
-
-    if (this.plugin.settings.devMode) {
-      new Setting(advancedContainer)
-        .setName('Direct Server URL')
-        .addText(text => text
-          .setValue(this.plugin.settings.serverUrl)
-          .onChange(async (val) => {
-            this.plugin.settings.serverUrl = val;
-            await this.plugin.saveSettings();
+            this.plugin.stopDaemon();
+            this.display();
           }));
 
-      new Setting(advancedContainer)
-        .setName('Direct Username')
-        .addText(text => text
-          .setValue(this.plugin.settings.username)
-          .onChange(async (val) => {
-            this.plugin.settings.username = val;
-            await this.plugin.saveSettings();
-          }));
+    } else {
+      new Setting(card)
+        .setName('Username')
+        .addText(text => text.setValue(this.plugin.settings.username).onChange(async v => { this.plugin.settings.username = v; await this.plugin.saveSettings(); }));
 
-      new Setting(advancedContainer)
-        .setName('Direct Password')
-        .addText(text => text
-          .setValue(this.plugin.settings.passwordHash)
-          .onChange(async (val) => {
-            this.plugin.settings.passwordHash = val;
-            await this.plugin.saveSettings();
-          }));
+      new Setting(card)
+        .setName('Password')
+        .addText(text => text.setValue(this.plugin.settings.passwordHash).onChange(async v => { this.plugin.settings.passwordHash = v; await this.plugin.saveSettings(); }));
 
-      new Setting(advancedContainer)
-        .setName('Workspace Identifier')
-        .addText(text => text
-          .setValue(this.plugin.settings.workspaceName)
-          .onChange(async (val) => {
-            this.plugin.settings.workspaceName = val;
+      new Setting(card)
+        .addButton(btn => btn
+          .setButtonText('Start Local Host')
+          .setCta()
+          .onClick(async () => {
+            if (!this.plugin.settings.username || !this.plugin.settings.passwordHash) {
+              new Notice('Please set Username and Password to secure the host.');
+              return;
+            }
+            this.plugin.settings.serverUrl = 'ws://localhost:1234/sync';
             await this.plugin.saveSettings();
-          }));
-
-      new Setting(advancedContainer)
-        .setName('Debug Logging')
-        .addToggle(toggle => toggle
-          .setValue(this.plugin.settings.debugLogging)
-          .onChange(async (val) => {
-            this.plugin.settings.debugLogging = val;
-            await this.plugin.saveSettings();
-          }));
-
-      new Setting(advancedContainer)
-        .setName('Auto-Sync On Load')
-        .addToggle(toggle => toggle
-          .setValue(this.plugin.settings.autoSyncOnLoad)
-          .onChange(async (val) => {
-            this.plugin.settings.autoSyncOnLoad = val;
-            await this.plugin.saveSettings();
+            await this.plugin.startDaemon();
+            this.display();
           }));
     }
   }
+
+  renderCloudMode(containerEl: HTMLElement) {
+    const card = containerEl.createEl('div');
+    card.style.background = 'var(--background-secondary)';
+    card.style.padding = '20px';
+    card.style.borderRadius = '8px';
+    card.style.marginBottom = '24px';
+    card.style.border = '1px solid var(--text-accent)';
+
+    card.createEl('h3', { text: 'Cloud Server Connection', attr: { style: 'margin-top: 0;' } });
+    card.createEl('p', { text: 'Connect to an external Live Cursor cloud server for remote collaboration.', attr: { style: 'font-size: 13px; color: var(--text-muted);' } });
+
+    new Setting(card)
+      .setName('Server URL')
+      .addText(text => text.setValue(this.plugin.settings.serverUrl).onChange(async v => { this.plugin.settings.serverUrl = v; await this.plugin.saveSettings(); }));
+
+    new Setting(card)
+      .setName('Username')
+      .addText(text => text.setValue(this.plugin.settings.username).onChange(async v => { this.plugin.settings.username = v; await this.plugin.saveSettings(); }));
+
+    new Setting(card)
+      .setName('Password')
+      .addText(text => text.setValue(this.plugin.settings.passwordHash).onChange(async v => { this.plugin.settings.passwordHash = v; await this.plugin.saveSettings(); }));
+
+    new Setting(card)
+      .addButton(btn => btn
+        .setButtonText('Sync Vault Configs')
+        .onClick(async () => {
+          const engine = new ConfigSyncEngine(
+            this.plugin.app,
+            this.plugin.settings.serverUrl,
+            this.plugin.settings.username,
+            this.plugin.settings.passwordHash,
+            this.plugin.settings.workspaceName
+          );
+          btn.setButtonText('Syncing...');
+          await engine.syncConfig();
+          btn.setButtonText('Sync Vault Configs');
+        }))
+      .addButton(btn => btn
+        .setButtonText('Connect')
+        .setCta()
+        .onClick(async () => {
+          new Notice('Cloud settings saved. Open a file to begin syncing.');
+        }));
+  }
+
+  renderWebrtcMode(containerEl: HTMLElement) {
+    const card = containerEl.createEl('div');
+    card.style.background = 'var(--background-secondary)';
+    card.style.padding = '20px';
+    card.style.borderRadius = '8px';
+    card.style.marginBottom = '24px';
+    card.style.border = '1px solid var(--text-accent)';
+
+    card.createEl('h3', { text: 'WebRTC P2P Mesh', attr: { style: 'margin-top: 0;' } });
+    card.createEl('p', { text: 'True serverless synchronization. Works flawlessly on Mobile and Desktop. Just ensure all devices use the exact same Room Name and Password.', attr: { style: 'font-size: 13px; color: var(--text-muted);' } });
+
+    new Setting(card)
+      .setName('Room Name')
+      .setDesc('A unique identifier for your vault mesh.')
+      .addText(text => text.setValue(this.plugin.settings.webrtcRoomName).onChange(async v => { this.plugin.settings.webrtcRoomName = v; await this.plugin.saveSettings(); }));
+
+    new Setting(card)
+      .setName('Room Password (Optional)')
+      .setDesc('Encrypts the WebRTC connection.')
+      .addText(text => text.setValue(this.plugin.settings.webrtcPassword).onChange(async v => { this.plugin.settings.webrtcPassword = v; await this.plugin.saveSettings(); }));
+      
+    new Setting(card)
+      .addButton(btn => btn
+        .setButtonText('Sync Vault Configs')
+        .setCta()
+        .onClick(async () => {
+          const engine = new ConfigSyncEngine(
+            this.plugin.app,
+            this.plugin.settings.serverUrl,
+            this.plugin.settings.username,
+            this.plugin.settings.passwordHash,
+            this.plugin.settings.workspaceName
+          );
+          btn.setButtonText('Syncing...');
+          await engine.syncConfigViaWebrtc(this.plugin.settings.webrtcRoomName, this.plugin.settings.webrtcPassword);
+          btn.setButtonText('Sync Vault Configs');
+        }));
+  }
 }
+
 
 class RoleSelectionModal extends Modal {
   constructor(app: App, private plugin: LiveCursorPlugin, private tab: LiveCursorSettingTab) {

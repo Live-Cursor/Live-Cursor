@@ -109,21 +109,29 @@ export class SubnetSweeper {
     const subnets = Array.from(bases);
 
     for (const base of subnets) {
-      const allPromises: Promise<string>[] = [];
-      for (let i = 1; i < 255; i++) {
-        const targetIP = `${base}${i}`;
-        if (!localIPs.includes(targetIP)) {
-          allPromises.push(this.checkWebSocket(targetIP));
-        }
-      }
+      console.log(`[LiveCursor] Sweeping subnet: ${base}`);
+      const BATCH_SIZE = 30;
       
-      try {
-        const foundUrl = await Promise.any(allPromises);
-        this.closeAllSockets();
-        return foundUrl;
-      } catch (e) {
-        // This subnet failed (timeout or error), clean up and try the next base
-        this.closeAllSockets();
+      for (let i = 1; i < 255; i += BATCH_SIZE) {
+        const batchPromises: Promise<string>[] = [];
+        const end = Math.min(i + BATCH_SIZE, 255);
+        
+        for (let j = i; j < end; j++) {
+          const targetIP = `${base}${j}`;
+          if (!localIPs.includes(targetIP)) {
+            batchPromises.push(this.checkWebSocket(targetIP));
+          }
+        }
+        
+        try {
+          // Promise.any will resolve as soon as any socket connects successfully
+          const foundUrl = await Promise.any(batchPromises);
+          this.closeAllSockets();
+          return foundUrl;
+        } catch (e) {
+          // This batch failed, close sockets and move to the next batch
+          this.closeAllSockets();
+        }
       }
     }
 

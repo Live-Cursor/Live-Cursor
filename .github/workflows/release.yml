@@ -7,17 +7,20 @@ on:
 
 permissions:
   contents: write
+  attestations: write
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install Dependencies
         run: npm ci --legacy-peer-deps
@@ -25,8 +28,13 @@ jobs:
       - name: Build Plugin
         run: npm run build
 
+      - name: Attest main.js build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: main.js
+
       - name: Create Release and Upload Assets
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             main.js

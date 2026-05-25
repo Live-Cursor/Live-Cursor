@@ -1,7 +1,5 @@
 import { App, requestUrl, Notice } from 'obsidian';
 import * as Y from 'yjs';
-import { WebrtcProvider } from 'y-webrtc';
-
 export interface FileManifest {
   [filePath: string]: {
     size: number;
@@ -29,6 +27,8 @@ function deepMerge(target: any, source: any): any {
 }
 
 export class ConfigSyncEngine {
+  private static isSyncing = false;
+
   constructor(
     private app: App,
     private serverUrl: string,
@@ -93,8 +93,13 @@ export class ConfigSyncEngine {
     }
   }
 
-  public async syncConfig() {
-    new Notice('Syncing configurations...');
+  public async syncConfig(silent: boolean = false) {
+    if (ConfigSyncEngine.isSyncing) {
+      if (!silent) new Notice('Sync already in progress...');
+      return;
+    }
+    ConfigSyncEngine.isSyncing = true;
+    if (!silent) new Notice('Syncing configurations...', 2000);
     const configDir = this.app.vault.configDir;
 
     try {
@@ -120,7 +125,7 @@ export class ConfigSyncEngine {
       // Map local files by relative path for unified syncing
       const localMap = new Map<string, { path: string, stat: any }>();
       for (const local of localFiles) {
-        const relPath = local.path.substring(configDir.length + 1).replace(/\\/g, '/');
+        const relPath = local.path.replace(/\\/g, '/');
         localMap.set(relPath, local);
       }
 
@@ -245,207 +250,14 @@ export class ConfigSyncEngine {
         }
       }
 
-      new Notice(actionsCount > 0 ? 'Configurations updated successfully!' : 'Configurations in sync.');
+      if (!silent) new Notice(actionsCount > 0 ? `Sync complete (${actionsCount} updated)` : 'Configurations in sync.', 2000);
     } catch (e: any) {
       // Keep it professional and non-intrusive
       console.error('[LiveCursor] Config Sync Error:', e);
-      new Notice(`Sync completed (offline/standby).`);
+      if (!silent) new Notice(`Sync failed. Check connection.`, 2000);
+    } finally {
+      ConfigSyncEngine.isSyncing = false;
     }
-  }
-
-  public async syncConfigViaWebrtc(doc: any) {
-    new Notice('Syncing full vault via WebRTC Mesh...', 5000);
-    
-    try {
-      if (!doc) {
-         new Notice('WebRTC mesh not connected yet. Check settings.');
-         return;
-      }
-      const configDir = '';
-      
-      const manifestMap = doc.getMap('manifest');
-      const filesMap = doc.getMap('files');
-
-      const remoteManifest = manifestMap.toJSON() as FileManifest;
-      const localFiles: { path: string, stat: any }[] = [];
-
-      // Recursive local scan of entire vault
-      const scanDir = async (dir: string) => {
-        const list = await this.app.vault.adapter.list(dir);
-        for (const file of list.files) {
-          if (file.endsWith('workspace.json') || file.endsWith('workspace-mobile.json') || file.endsWith('.DS_Store')) continue;
-          const stat = await this.app.vault.adapter.stat(file);
-          if (stat) localFiles.push({ path: file, stat });
-        }
-        for (const folder of list.folders) {
-          if (folder.includes('.git') || folder.includes('node_modules') || folder.includes('Sync Conflicts') || folder.includes('.obsidian-test')) continue;
-          await scanDir(folder);
-        }
-      };
-
-      await scanDir('');
-
-      // Map local files by relative path for unified syncing
-      const localMap = new Map<string, { path: string, stat: any }>();
-      for (const local of localFiles) {
-        const relPath = (local.path.startsWith('/') ? local.path.substring(1) : local.path).replace(/\\/g, '/');
-        localMap.set(relPath, local);
-      }
-
-      // Collect all unique relative paths across local and remote
-      const allPaths = new Set<string>([
-        ...localMap.keys(),
-        ...Object.keys(remoteManifest)
-      ]);
-
-      let actionsCount = 0;
-
-
-      const uploadFileFn = async (relPath: string, data: ArrayBuffer, mtime: number) => {
-        filesMap.set(relPath, new Uint8Array(data));
-        manifestMap.set(relPath, { size: data.byteLength, mtime, device: this.deviceName });
-      };
-
-      const downloadFileFn = async (relPath: string): Promise<ArrayBuffer> => {
-        const data = filesMap.get(relPath) as Uint8Array;
-        if (!data) throw new Error('File missing in mesh');
-        return data.buffer as ArrayBuffer;
-      };
-
-      for (const relPath of allPaths) {
-        const local = localMap.get(relPath);
-        const remote = remoteManifest[relPath];
-        const fullLocalPath = relPath;
-
-        if (local && !remote) {
-          // File exists only locally -> Upload to mesh
-          const data = await this.app.vault.adapter.readBinary(local.path);
-          await uploadFileFn(relPath, data, local.stat.mtime);
-          actionsCount++;
-        } else if (!local && remote) {
-          // File exists only remotely -> Download from mesh
-          await this.ensureDirExists(relPath, '');
-          const data = await downloadFileFn(relPath);
-          await this.writeToVaultUI(relPath, data);
-          actionsCount++;
-        } else if (local && remote) {
-          // File exists in both -> Check for modification differences
-          const timeDiff = Math.abs(local.stat.mtime - remote.mtime);
-          
-          if (timeDiff > 2000) {
-            // Contents or timestamps differ. Let's read both.
-            const localData = await this.app.vault.adapter.readBinary(local.path);
-            const remoteData = await downloadFileFn(relPath);
-
-            // Compare binary content quickly
-            const localBytes = new Uint8Array(localData);
-            const remoteBytes = new Uint8Array(remoteData);
-            let contentsMatch = localBytes.length === remoteBytes.length;
-            if (contentsMatch) {
-              for (let i = 0; i < localBytes.length; i++) {
-                if (localBytes[i] !== remoteBytes[i]) {
-                  contentsMatch = false;
-                  break;
-                }
-              }
-            }
-
-            if (contentsMatch) {
-              // Contents are identical. Do NOT write to disk to avoid mtime bounce.
-              // Just update the mesh manifest silently so timestamps match.
-              if (local.stat.mtime > remote.mtime) {
-                await uploadFileFn(relPath, localData, local.stat.mtime);
-              }
-            } else {
-              // Conflict: Contents are different and timestamps differ.
-              if (relPath.endsWith('.json')) {
-                // Elegant automatic JSON merge
-                try {
-                  const decoder = new TextDecoder('utf-8');
-                  const encoder = new TextEncoder();
-
-                  const localJson = JSON.parse(decoder.decode(localBytes));
-                  const remoteJson = JSON.parse(decoder.decode(remoteBytes));
-
-                  const mergedJson = deepMerge(localJson, remoteJson);
-                  const mergedData = encoder.encode(JSON.stringify(mergedJson, null, 2)).buffer;
-                  
-                  const mergedMtime = Math.max(local.stat.mtime, remote.mtime);
-
-                  // Save merged file locally and upload to remote
-                  await this.writeToVaultUI(relPath, mergedData);
-                  await uploadFileFn(relPath, mergedData, mergedMtime);
-                  actionsCount++;
-                  console.log(`[LiveCursor] Automatically merged JSON conflict for config file: ${relPath}`);
-                } catch (jsonErr) {
-                  // Fall back to mtime-based resolution if parsing fails
-                  console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
-                  const remoteDevice = remote.device || 'Remote';
-                  const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
-                  const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
-                  
-                  await this.ensureDirExists(localConflictPath, '');
-                  await this.writeToVaultUI(localConflictPath, localData);
-                  
-                  await this.ensureDirExists(remoteConflictPath, '');
-                  await this.writeToVaultUI(remoteConflictPath, remoteData);
-
-                  if (local.stat.mtime > remote.mtime) {
-                    await uploadFileFn(relPath, localData, local.stat.mtime);
-                  } else {
-                    await this.writeToVaultUI(relPath, remoteData);
-                  }
-                  actionsCount++;
-                }
-              } else {
-                // Non-JSON files: Resolve silently via latest modification time (mtime)
-                const remoteDevice = remote.device || 'Remote';
-                const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
-                const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
-                  
-                await this.ensureDirExists(localConflictPath, '');
-                await this.writeToVaultUI(localConflictPath, localData);
-                  
-                await this.ensureDirExists(remoteConflictPath, '');
-                await this.writeToVaultUI(remoteConflictPath, remoteData);
-
-                if (local.stat.mtime > remote.mtime) {
-                  await uploadFileFn(relPath, localData, local.stat.mtime);
-                } else {
-                  await this.writeToVaultUI(relPath, remoteData);
-                }
-                actionsCount++;
-              }
-            }
-          }
-        }
-      }
-
-      new Notice(actionsCount > 0 ? `Mesh Sync: ${actionsCount} files updated!` : 'Vault is completely in sync!');
-      
-
-      
-    } catch (e: any) {
-      console.error('[LiveCursor] WebRTC Config Sync Error:', e);
-      new Notice(`Mesh Sync completed (standby).`);
-    }
-  }
-
-  public setupBackgroundListener(doc: any) {
-    if (!doc) return;
-    const manifestMap = doc.getMap('manifest');
-    manifestMap.observe(async (event: any) => {
-      // Ignore local changes
-      if (event.transaction.local) return;
-      
-      console.log('[LiveCursor] Remote vault manifest changed. Automatically syncing...');
-      new Notice('Incoming files from WebRTC Mesh...', 3000);
-      try {
-        await this.syncConfigViaWebrtc(doc);
-      } catch (e) {
-        console.error('[LiveCursor] Background Sync Error:', e);
-      }
-    });
   }
 
 }

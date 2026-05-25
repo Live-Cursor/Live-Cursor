@@ -8,9 +8,7 @@ const decoding = require('lib0/decoding');
 const syncProtocol = require('y-protocols/sync');
 const awarenessProtocol = require('y-protocols/awareness');
 
-// --- Inline y-websocket connection setup (no internal API dependency) ---
 const docs = new Map();
-
 const messageSync = 0;
 const messageAwareness = 1;
 
@@ -18,7 +16,6 @@ const setupWSConnection = (conn, req, doc) => {
   conn.binaryType = 'arraybuffer';
   const awareness = new awarenessProtocol.Awareness(doc);
 
-  // Send initial sync step 1
   const sendSyncStep1 = () => {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, messageSync);
@@ -26,7 +23,6 @@ const setupWSConnection = (conn, req, doc) => {
     conn.send(encoding.toUint8Array(encoder));
   };
 
-  // Send awareness states
   const sendAwareness = () => {
     const states = Array.from(awareness.getStates().keys());
     if (states.length > 0) {
@@ -61,7 +57,6 @@ const setupWSConnection = (conn, req, doc) => {
     awarenessProtocol.removeAwarenessStates(awareness, [doc.clientID], 'connection closed');
   });
 
-  // Broadcast doc updates to this connection
   const docUpdateHandler = (update, origin) => {
     if (origin !== conn) {
       const encoder = encoding.createEncoder();
@@ -71,7 +66,6 @@ const setupWSConnection = (conn, req, doc) => {
     }
   };
 
-  // Broadcast awareness to this connection
   const awarenessUpdateHandler = ({ added, updated, removed }) => {
     const changedClients = added.concat(updated).concat(removed);
     const encoder = encoding.createEncoder();
@@ -91,87 +85,80 @@ const setupWSConnection = (conn, req, doc) => {
   sendSyncStep1();
   sendAwareness();
 };
-// --- End inline setup ---
 
-// 1. Pure-JS File Database implementation
-class JSONStorage {
-  constructor(filePath) {
-    this.filePath = filePath;
-    this.data = { users: {}, rooms: {} };
-    this.load();
+class BinaryStorage {
+  constructor(dbDir) {
+    this.dbDir = dbDir;
+    this.roomsDir = path.join(dbDir, 'rooms');
+    this.usersFile = path.join(dbDir, 'users.json');
+    this.users = {};
+    if (!fs.existsSync(this.roomsDir)) fs.mkdirSync(this.roomsDir, { recursive: true });
+    this.loadUsers();
   }
 
-  load() {
+  loadUsers() {
     try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf8');
-        this.data = JSON.parse(raw);
-        if (!this.data.users) this.data.users = {};
-        if (!this.data.rooms) this.data.rooms = {};
+      if (fs.existsSync(this.usersFile)) {
+        this.users = JSON.parse(fs.readFileSync(this.usersFile, 'utf8'));
       } else {
-        const dir = path.dirname(this.filePath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        this.save();
+        fs.writeFileSync(this.usersFile, '{}');
       }
     } catch (e) {
-      console.error('Failed to load DB:', e);
+      console.error('[Daemon] Failed to load users', e);
     }
   }
 
-  save() {
+  registerUser(u, p) { 
+    this.users[u] = p; 
+    fs.writeFileSync(this.usersFile, JSON.stringify(this.users)); 
+  }
+
+  verifyUser(u, p) { 
+    return this.users[u] === p; 
+  }
+
+  listUsers() { 
+    return Object.keys(this.users); 
+  }
+
+  getRoomPath(roomId) {
+    const safeName = encodeURIComponent(roomId).replace(/%20/g, '_').slice(0, 100);
+    return path.join(this.roomsDir, safeName + '.bin');
+  }
+
+  loadDoc(roomId, doc) {
+    const p = this.getRoomPath(roomId);
+    if (fs.existsSync(p)) {
+      try {
+        const data = fs.readFileSync(p);
+        Y.applyUpdate(doc, new Uint8Array(data));
+      } catch (e) { 
+        console.error(`[Daemon] Failed to load room bin ${roomId}`, e); 
+      }
+    }
+  }
+
+  saveDoc(roomId, doc) {
+    const p = this.getRoomPath(roomId);
     try {
-      fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf8');
-    } catch (e) {
-      console.error('Failed to save DB:', e);
+      const state = Y.encodeStateAsUpdate(doc);
+      fs.writeFileSync(p, Buffer.from(state.buffer, state.byteOffset, state.byteLength));
+    } catch (e) { 
+      console.error(`[Daemon] Failed to save room bin ${roomId}`, e); 
     }
-  }
-
-  registerUser(username, passwordHash) {
-    this.data.users[username] = passwordHash;
-    this.save();
-  }
-
-  verifyUser(username, passwordHash) {
-    return this.data.users[username] === passwordHash;
-  }
-
-  listUsers() {
-    return Object.keys(this.data.users);
-  }
-
-  appendUpdate(roomId, updateBase64) {
-    if (!this.data.rooms[roomId]) {
-      this.data.rooms[roomId] = [];
-    }
-    this.data.rooms[roomId].push(updateBase64);
-    this.save();
-  }
-
-  getUpdates(roomId) {
-    return this.data.rooms[roomId] || [];
-  }
-
-  compactRoom(roomId, stateVectorBase64) {
-    this.data.rooms[roomId] = [stateVectorBase64];
-    this.save();
   }
 }
 
-// 2. Initialize Telemetry and Storage
 const port = process.env.PORT || 1234;
 const dbDir = process.env.DB_DIR || path.join(__dirname, 'data');
-const dbPath = path.join(dbDir, 'live-cursor-daemon.json');
-const db = new JSONStorage(dbPath);
-// docs map is defined above in the inline setup
+const db = new BinaryStorage(dbDir);
 
-console.log(`[Daemon] Local Storage loaded at: ${dbPath}`);
+console.log(`[Daemon] Local Storage loaded at: ${dbDir}`);
 
-// 3. HTTP Server setup for APIs
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const query = Object.fromEntries(url.searchParams.entries());
 
-  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -182,7 +169,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Public check: Admin registry status
   if (url.pathname === '/api/admin-exists') {
     const exists = db.listUsers().includes('admin');
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -190,11 +176,9 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Determine if this is the initial registration of the admin account when the user DB is empty
   const isInitialSetup = db.listUsers().length === 0 && url.pathname === '/api/admin/create-user';
 
   if (!isInitialSetup) {
-    // Credentials authorization gate for Admin APIs
     const authUser = query.user;
     const authPass = query.pass;
     if (!db.verifyUser(authUser, authPass)) {
@@ -204,7 +188,6 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // --- Workspace Sync APIs (Authenticated) ---
   if (url.pathname === '/api/manifest') {
     const workspace = query.workspace || 'default-workspace';
     const wsDir = path.join(dbDir, 'workspaces', workspace);
@@ -248,7 +231,6 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Path traversal check
     const wsDir = path.resolve(path.join(dbDir, 'workspaces', workspace));
     const targetPath = path.resolve(path.join(wsDir, relPath));
     if (!targetPath.startsWith(wsDir)) {
@@ -294,7 +276,6 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Path traversal check
     const wsDir = path.resolve(path.join(dbDir, 'workspaces', workspace));
     const targetPath = path.resolve(path.join(wsDir, relPath));
     if (!targetPath.startsWith(wsDir)) {
@@ -321,7 +302,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Create Standard User (Admin authenticated)
   if (url.pathname === '/api/admin/create-user' && req.method === 'POST') {
     const newUser = query.new_user;
     const newPass = query.new_pass;
@@ -336,19 +316,16 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Server Diagnostics (Admin authenticated)
   if (url.pathname === '/api/admin/status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       uptime: Math.floor(process.uptime()),
       activeRooms: docs.size,
-      memoryHeapUsed: process.memoryUsage().heapUsed,
-      dbSize: fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0
+      memoryHeapUsed: process.memoryUsage().heapUsed
     }));
     return;
   }
 
-  // User list directory (Admin authenticated)
   if (url.pathname === '/api/admin/users') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(db.listUsers()));
@@ -359,13 +336,14 @@ const server = http.createServer((req, res) => {
   res.end('Not Found');
 });
 
-// 4. WebSocket Routing upgrade handler
 const wss = new WebSocket.Server({ noServer: true });
+
+// Map of doc save timeouts
+const saveTimeouts = new Map();
 
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   
-  // y-websocket format is /sync/room-name. Extract room-name correctly.
   let roomName = url.pathname.replace(/^\/sync\/?/, '');
   roomName = decodeURIComponent(roomName);
 
@@ -381,33 +359,29 @@ wss.on('connection', (ws, req) => {
 
   console.log(`[Daemon] Client connected to room: ${roomName}`);
 
-  // Load and apply Y.Doc from local file database
   let doc = docs.get(roomName);
   if (!doc) {
     doc = new Y.Doc();
-    const storedUpdates = db.getUpdates(roomName);
-    console.log(`[Daemon] Loaded ${storedUpdates.length} updates for room: ${roomName}`);
-    
-    for (const updateB64 of storedUpdates) {
-      try {
-        Y.applyUpdate(doc, Buffer.from(updateB64, 'base64'));
-      } catch (e) {
-        console.error('[Daemon] Failed to apply room update vector:', e);
-      }
-    }
+    db.loadDoc(roomName, doc);
     docs.set(roomName, doc);
+    
+    // Setup debounced persistence hook on document updates
+    doc.on('update', () => {
+      let timeout = saveTimeouts.get(roomName);
+      if (timeout) clearTimeout(timeout);
+      
+      timeout = setTimeout(() => {
+        db.saveDoc(roomName, doc);
+        saveTimeouts.delete(roomName);
+      }, 2000);
+      
+      saveTimeouts.set(roomName, timeout);
+    });
   }
 
-  // Bind connection to Yjs network synchronization loop
   setupWSConnection(ws, req, doc);
-
-  // Persistence callback hook on document updates
-  doc.on('update', (update) => {
-    db.appendUpdate(roomName, Buffer.from(update).toString('base64'));
-  });
 });
 
-// 5. Handle HTTP server protocol upgrade
 server.on('upgrade', (request, socket, head) => {
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit('connection', ws, request);

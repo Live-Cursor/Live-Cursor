@@ -1,11 +1,9 @@
-import * as os from 'os';
-import { WebSocket } from 'ws';
-import { Notice } from 'obsidian';
+import { Notice, Platform } from 'obsidian';
 
 export class SubnetSweeper {
   private port: number;
   private timeoutMs: number;
-  private activeSockets: WebSocket[] = [];
+  private activeSockets: any[] = [];
 
   constructor(port: number = 4444, timeoutMs: number = 2000) {
     this.port = port;
@@ -13,15 +11,21 @@ export class SubnetSweeper {
   }
 
   private getLocalIPs(): string[] {
-    const interfaces = os.networkInterfaces();
     const ips: string[] = [];
-
-    for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]!) {
-        // Skip over internal (i.e. 127.0.0.1) and non-ipv4 addresses
-        if (iface.family === 'IPv4' && !iface.internal) {
-          ips.push(iface.address);
+    if (Platform.isDesktopApp) {
+      try {
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        for (const name of Object.keys(interfaces)) {
+          for (const iface of interfaces[name]!) {
+            // Skip over internal (i.e. 127.0.0.1) and non-ipv4 addresses
+            if (iface.family === 'IPv4' && !iface.internal) {
+              ips.push(iface.address);
+            }
+          }
         }
+      } catch (e) {
+        // Fallback below
       }
     }
     return ips;
@@ -53,22 +57,22 @@ export class SubnetSweeper {
         }
       }, this.timeoutMs);
 
-      ws.on('open', () => {
+      ws.onopen = () => {
         if (!isDone) {
           isDone = true;
           clearTimeout(timeout);
           resolve(url);
         }
-      });
+      };
 
-      ws.on('error', (err) => {
+      ws.onerror = (err: any) => {
         if (!isDone) {
           isDone = true;
           clearTimeout(timeout);
           ws.close();
           reject(err);
         }
-      });
+      };
     });
   }
 
@@ -83,24 +87,35 @@ export class SubnetSweeper {
 
   public async findHost(): Promise<string | null> {
     const localIPs = this.getLocalIPs();
-    if (localIPs.length === 0) {
-      new Notice('No local network interfaces found. Are you connected to Wi-Fi/Hotspot?');
-      return null;
-    }
+    
+    let bases = new Set<string>();
+    localIPs.forEach(ip => {
+      const parts = ip.split('.');
+      if (parts.length === 4) {
+        bases.add(`${parts[0]}.${parts[1]}.${parts[2]}.`);
+      }
+    });
+    
+    // Add common Mobile Hotspot subnets
+    bases.add('192.168.43.'); // standard android
+    bases.add('192.168.49.'); // some android
+    bases.add('192.168.1.');
+    bases.add('192.168.0.');
+    bases.add('172.20.10.');  // iOS
 
     new Notice('Sweeping local network to find Host...');
     console.log('[LiveCursor] Local IPs found:', localIPs);
 
     const allPromises: Promise<string>[] = [];
 
-    for (const localIP of localIPs) {
-      const subnetIPs = this.generateSubnetIPs(localIP);
-      for (const targetIP of subnetIPs) {
-        if (targetIP !== localIP) {
+    bases.forEach(base => {
+      for (let i = 1; i < 255; i++) {
+        const targetIP = `${base}${i}`;
+        if (!localIPs.includes(targetIP)) {
           allPromises.push(this.checkWebSocket(targetIP));
         }
       }
-    }
+    });
 
     try {
       // Promise.any resolves as soon as ANY of the websockets connects successfully

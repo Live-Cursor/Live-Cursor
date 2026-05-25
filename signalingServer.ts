@@ -1,6 +1,4 @@
-import { WebSocketServer, WebSocket } from 'ws';
-import * as http from 'http';
-import { Notice } from 'obsidian';
+import { Notice, Platform } from 'obsidian';
 
 const wsReadyStateConnecting = 0;
 const wsReadyStateOpen = 1;
@@ -8,10 +6,10 @@ const pingTimeout = 30000;
 
 export class LocalSignalingServer {
   private port: number;
-  private wss: WebSocketServer | null = null;
-  private server: http.Server | null = null;
-  private topics: Map<string, Set<WebSocket>> = new Map();
-  private pingIntervals: Map<WebSocket, any> = new Map();
+  private wss: any = null;
+  private server: any = null;
+  private topics: Map<string, Set<any>> = new Map();
+  private pingIntervals: Map<any, any> = new Map();
 
   constructor(port: number = 4444) {
     this.port = port;
@@ -19,25 +17,33 @@ export class LocalSignalingServer {
 
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (!Platform.isDesktopApp) {
+        reject(new Error("Local Room Server can only run on Desktop"));
+        return;
+      }
+      
       if (this.server) {
         resolve();
         return;
       }
 
-      this.server = http.createServer((request, response) => {
+      const http = require('http');
+      const { WebSocketServer } = require('ws');
+
+      this.server = http.createServer((request: any, response: any) => {
         response.writeHead(200, { 'Content-Type': 'text/plain' });
         response.end('okay');
       });
 
       this.wss = new WebSocketServer({ noServer: true });
 
-      this.wss.on('connection', (conn: WebSocket) => {
+      this.wss.on('connection', (conn: any) => {
         this.onConnection(conn);
       });
 
-      this.server.on('upgrade', (request, socket, head) => {
+      this.server.on('upgrade', (request: any, socket: any, head: any) => {
         if (this.wss) {
-          this.wss.handleUpgrade(request, socket, head, (ws) => {
+          this.wss.handleUpgrade(request, socket, head, (ws: any) => {
             this.wss?.emit('connection', ws, request);
           });
         }
@@ -80,7 +86,7 @@ export class LocalSignalingServer {
     return this.server !== null;
   }
 
-  private send(conn: WebSocket, message: any) {
+  private send(conn: any, message: any) {
     if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
       conn.close();
     }
@@ -91,7 +97,7 @@ export class LocalSignalingServer {
     }
   }
 
-  private onConnection(conn: WebSocket) {
+  private onConnection(conn: any) {
     const subscribedTopics = new Set<string>();
     let closed = false;
     let pongReceived = true;

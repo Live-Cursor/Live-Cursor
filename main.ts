@@ -7,6 +7,7 @@ import { EditorView } from '@codemirror/view';
 import { Compartment, StateEffect } from '@codemirror/state';
 import { collaborationExtension } from './collabExtension';
 import { reconcileYText } from './reconcile';
+import { ConfigSyncEngine } from './configSync';
 
 // Electron/Node APIs — only available on desktop
 declare const require: (module: string) => any;
@@ -37,6 +38,7 @@ export default class LiveCursorPlugin extends Plugin {
   private serverProcess: any = null;
   private retryTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private settingsTab: LiveCursorSettingTab | null = null;
+  public configSyncEngine: ConfigSyncEngine | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -44,7 +46,17 @@ export default class LiveCursorPlugin extends Plugin {
     this.statusBarItem = this.addStatusBarItem();
     this.updateStatusBar();
 
-    // Ribbon icon to simulate collaborator
+    const serverUrl = this.settings.signalingUrl.trim() || 'ws://localhost:4444';
+    this.configSyncEngine = new ConfigSyncEngine(
+      this.app,
+      serverUrl,
+      this.settings.nickname, // Basic auth placeholder
+      'default-pass',
+      this.settings.roomName, // Using room name as workspace name
+      this.settings.nickname
+    );
+
+    // Commands
     this.addRibbonIcon('users', 'Simulate Collaborator Activity', () => {
       this.toggleSimulator();
     });
@@ -398,6 +410,11 @@ export default class LiveCursorPlugin extends Plugin {
         // Clear any pending retry for this file
         const t = this.retryTimeouts.get(file.path);
         if (t) { clearTimeout(t); this.retryTimeouts.delete(file.path); }
+        
+        // Trigger background vault sync if not already syncing
+        if (this.configSyncEngine) {
+          this.configSyncEngine.syncConfig(true);
+        }
       } else if (status === 'connecting') {
         this.connectionStatus = 'connecting';
       } else if (status === 'disconnected') {
@@ -734,6 +751,23 @@ class LiveCursorSettingTab extends PluginSettingTab {
         .onClick(() => {
           this.plugin.reconnectAll();
           new Notice('Reconnecting to server...');
+        }));
+
+    // ── Section: Full Vault Sync ──
+    containerEl.createEl('h3', { text: '📂 Full Vault Sync', attr: { style: sectionHeaderStyle() } });
+    
+    new Setting(containerEl)
+      .setName('Sync Entire Vault Configurations')
+      .setDesc('Synchronize plugins, themes, snippets, and all configuration files to the server database. This happens automatically in the background, but you can force it here.')
+      .addButton(btn => btn
+        .setButtonText('Sync Vault Now')
+        .setCta()
+        .onClick(async () => {
+          if (!this.plugin.configSyncEngine) {
+            new Notice('Sync engine not initialized.');
+            return;
+          }
+          await this.plugin.configSyncEngine.syncConfig(false);
         }));
   }
 }

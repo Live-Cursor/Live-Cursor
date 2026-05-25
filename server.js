@@ -16,6 +16,10 @@ const roomsDir = path.join(dbDir, 'rooms');
 if (!fs.existsSync(roomsDir)) {
   fs.mkdirSync(roomsDir, { recursive: true });
 }
+const configDir = path.join(dbDir, 'config');
+if (!fs.existsSync(configDir)) {
+  fs.mkdirSync(configDir, { recursive: true });
+}
 
 // Map of active documents
 const docs = new Map();
@@ -55,8 +59,127 @@ function saveDoc(roomId, doc) {
   }
 }
 
+// Helper for parsing query params
+function getQueryParams(reqUrl) {
+  const urlObj = new URL(reqUrl, `http://localhost`);
+  return Object.fromEntries(urlObj.searchParams.entries());
+}
+
+function getConfigWorkspacePath(workspace) {
+  const safeWorkspace = encodeURIComponent(workspace || 'default').replace(/%20/g, '_');
+  const wsDir = path.join(configDir, safeWorkspace);
+  if (!fs.existsSync(wsDir)) {
+    fs.mkdirSync(wsDir, { recursive: true });
+  }
+  return wsDir;
+}
+
 // Create standard HTTP server
-const server = http.createServer((request, response) => {
+const server = http.createServer((req, res) => {
+  const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = urlObj.pathname;
+
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    return res.end();
+  }
+
+  // --- GET /api/manifest ---
+  if (pathname === '/api/manifest' && req.method === 'GET') {
+    const params = getQueryParams(req.url);
+    const wsDir = getConfigWorkspacePath(params.workspace);
+    const manifest = {};
+
+    function scanDir(dir) {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          scanDir(fullPath);
+        } else {
+          const relPath = path.relative(wsDir, fullPath).replace(/\\/g, '/');
+          manifest[relPath] = {
+            size: stat.size,
+            mtime: stat.mtimeMs,
+            device: 'Server'
+          };
+        }
+      }
+    }
+    
+    try {
+      scanDir(wsDir);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(manifest));
+    } catch (e) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // --- POST /api/upload ---
+  if (pathname === '/api/upload' && req.method === 'POST') {
+    const params = getQueryParams(req.url);
+    const wsDir = getConfigWorkspacePath(params.workspace);
+    const relPath = params.path;
+    
+    if (!relPath || relPath.includes('..')) {
+      res.writeHead(400);
+      return res.end('Invalid path');
+    }
+
+    const fullPath = path.join(wsDir, relPath);
+    const targetDir = path.dirname(fullPath);
+    
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const fileStream = fs.createWriteStream(fullPath);
+    req.pipe(fileStream);
+
+    req.on('end', () => {
+      // Set the file's mtime to what the client sent, if provided
+      if (params.mtime) {
+        const mtime = parseInt(params.mtime) / 1000;
+        try {
+          fs.utimesSync(fullPath, mtime, mtime);
+        } catch(e) {}
+      }
+      res.writeHead(200);
+      res.end('Uploaded');
+    });
+    return;
+  }
+
+  // --- GET /api/download ---
+  if (pathname === '/api/download' && req.method === 'GET') {
+    const params = getQueryParams(req.url);
+    const wsDir = getConfigWorkspacePath(params.workspace);
+    const relPath = params.path;
+    
+    if (!relPath || relPath.includes('..')) {
+      res.writeHead(400);
+      return res.end('Invalid path');
+    }
+
+    const fullPath = path.join(wsDir, relPath);
+    if (!fs.existsSync(fullPath)) {
+      res.writeHead(404);
+      return res.end('File not found');
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+    fs.createReadStream(fullPath).pipe(res);
+    return;
+  }
+
   response.writeHead(200, { 'Content-Type': 'text/plain' });
   response.end('Live Cursor Sync Server (WebSocket + DB) is running.');
 });

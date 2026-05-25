@@ -123,9 +123,13 @@ const remoteAwarenessListener = (awareness: any) =>
 
       constructor(private view: EditorView) {
         this.listener = () => {
-          this.view.dispatch({
-            effects: awarenessEffect.of()
-          });
+          setTimeout(() => {
+            if (!this.view.isDestroyed) {
+              this.view.dispatch({
+                effects: awarenessEffect.of()
+              });
+            }
+          }, 0);
         };
         awareness.on('change', this.listener);
       }

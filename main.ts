@@ -6,8 +6,6 @@ import { yCollab } from 'y-codemirror.next';
 import { EditorView } from '@codemirror/view';
 import { Compartment, StateEffect } from '@codemirror/state';
 import { collaborationExtension } from './collabExtension';
-import { LocalSignalingServer } from './signalingServer';
-import { SubnetSweeper } from './subnetSweep';
 import { reconcileYText } from './reconcile';
 
 interface LiveCursorSettings {
@@ -29,7 +27,6 @@ export default class LiveCursorPlugin extends Plugin {
   private activeSyncs: Map<string, { doc: Y.Doc, awareness: Awareness, provider?: WebrtcProvider }> = new Map();
   private simulatorInterval: any = null;
   private statusBarItem: HTMLElement | null = null;
-  private localSignalingServer: LocalSignalingServer = new LocalSignalingServer(4444);
   private diskDebouncers: Map<string, (file: TFile) => void> = new Map();
 
   async onload() {
@@ -43,11 +40,6 @@ export default class LiveCursorPlugin extends Plugin {
       this.toggleSimulator();
     });
 
-    // Add ribbon icon for Host Local Room
-    this.addRibbonIcon('server', 'Toggle Local Room Host', () => {
-      this.toggleLocalServer();
-    });
-
     // Add command to simulate collaborator
     this.addCommand({
       id: 'toggle-collaborator-simulation',
@@ -57,36 +49,9 @@ export default class LiveCursorPlugin extends Plugin {
       }
     });
 
-    // Add command to host local room
-    this.addCommand({
-      id: 'toggle-local-room',
-      name: 'Host/Stop Local Room Server',
-      callback: () => {
-        this.toggleLocalServer();
-      }
-    });
-
-    // Add command to find local host
-    this.addCommand({
-      id: 'find-local-host',
-      name: 'Find Local Host on Subnet',
-      callback: async () => {
-        const sweeper = new SubnetSweeper(4444, 2000);
-        const url = await sweeper.findHost();
-        if (url) {
-          this.settings.signalingUrl = url;
-          await this.saveSettings();
-          new Notice(`Host found at ${url}! Settings updated.`);
-          this.reconnectAll();
-        } else {
-          new Notice('Could not find any active hosts on the local network.');
-        }
-      }
-    });
-
     this.addSettingTab(new LiveCursorSettingTab(this.app, this));
 
-    // Listen to file opens to inject dummy Y.Doc
+    // Listen to file opens to inject Y.Doc
     this.registerEvent(
       this.app.workspace.on('active-leaf-change', (leaf: WorkspaceLeaf | null) => {
         if (!leaf) return;
@@ -97,7 +62,7 @@ export default class LiveCursorPlugin extends Plugin {
       })
     );
 
-    // Listen to active leaves to clean up memory (No Cartoon Memory Leaks)
+    // Listen to active leaves to clean up memory
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
         const openPaths = new Set<string>();
@@ -157,7 +122,6 @@ export default class LiveCursorPlugin extends Plugin {
       if (leaf.view instanceof MarkdownView && leaf.view.file) {
         const sync = this.activeSyncs.get(leaf.view.file.path);
         if (sync && sync.provider) {
-          // Re-initialize the provider with the new settings
           sync.provider.disconnect();
           const doc = sync.doc;
           const awareness = sync.awareness;
@@ -194,7 +158,6 @@ export default class LiveCursorPlugin extends Plugin {
       sync.doc.destroy();
     }
     this.activeSyncs.clear();
-    this.localSignalingServer.stop();
   }
 
   private configureEditorForFile(file: TFile) {
@@ -255,7 +218,6 @@ export default class LiveCursorPlugin extends Plugin {
 
       // Defensive Vault writing on network updates
       ytext.observe((event, transaction) => {
-        // If the change came from a remote peer, save it to disk ONLY if it's not actively open
         if (!transaction.local) {
           let isOpen = false;
           this.app.workspace.iterateAllLeaves((leaf) => {
@@ -281,10 +243,8 @@ export default class LiveCursorPlugin extends Plugin {
 
       // Construct a unique room name per file within the user's workspace
       const fileRoomName = `${this.settings.roomName}-${encodeURIComponent(file.path)}`;
-      
       const signaling = this.settings.signalingUrl ? [this.settings.signalingUrl] : ['wss://signaling.yjs.dev'];
 
-      // Initialize WebrtcProvider with custom peerOpts to prevent offline ICE hangs
       const provider = new WebrtcProvider(fileRoomName, doc, {
         awareness,
         signaling,
@@ -306,27 +266,6 @@ export default class LiveCursorPlugin extends Plugin {
       this.configureEditorForFile(file);
       this.updateStatusBar();
     }
-  }
-
-  async toggleLocalServer() {
-    if (this.localSignalingServer.isRunning()) {
-      this.localSignalingServer.stop();
-      this.settings.signalingUrl = 'wss://signaling.yjs.dev';
-      await this.saveSettings();
-      this.reconnectAll();
-    } else {
-      try {
-        await this.localSignalingServer.start();
-        // Automatically set the local setting to localhost if we are hosting
-        this.settings.signalingUrl = 'ws://localhost:4444';
-        await this.saveSettings();
-        new Notice('Signaling URL updated to local host.');
-        this.reconnectAll();
-      } catch (e) {
-        // Error is handled inside the start promise
-      }
-    }
-    this.updateStatusBar();
   }
 
   toggleSimulator() {
@@ -375,7 +314,6 @@ export default class LiveCursorPlugin extends Plugin {
       const docLength = currentSync.doc.getText('content').length;
       if (docLength === 0) return;
 
-      // Simulate movements and drag selections
       if (Math.random() < 0.2) {
         mockAnchor = Math.floor(Math.random() * docLength);
         mockHead = mockAnchor;
@@ -466,7 +404,7 @@ class LiveCursorSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Room Name')
-      .setDesc('A unique identifier for your vault mesh. Keep this identical across devices.')
+      .setDesc('A unique identifier for your vault collaboration room. Keep this identical across all devices.')
       .addText(text => text
         .setValue(this.plugin.settings.roomName)
         .onChange(async (val) => {
@@ -475,8 +413,8 @@ class LiveCursorSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('Custom Signaling URL')
-      .setDesc('The WebSocket URL of the signaling server (e.g., ws://192.168.1.5:4444). Leave blank to use defaults.')
+      .setName('Signaling Server URL')
+      .setDesc('The WebSocket URL of your central signaling server. Defaults to wss://signaling.yjs.dev.')
       .addText(text => text
         .setValue(this.plugin.settings.signalingUrl)
         .onChange(async (val) => {

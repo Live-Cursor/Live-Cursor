@@ -50,8 +50,7 @@ const context = await esbuild.context({
 		"buffer": "buffer",
 		"events": "events",
 		"stream": "stream-browserify",
-		"util": "util",
-		"ws": require.resolve("ws")
+		"util": "util"
 	},
 	inject: ["./process-shim.js"],
 	define: {

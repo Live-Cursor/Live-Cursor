@@ -1,10 +1,12 @@
-# Release Notes - Version 1.2.7
+# Release Notes - Version 1.3.0
 
-Version 1.2.7 fixes a critical synchronization bug where starting the local rooms server did not automatically reconnect active editor tabs to the local signaling instance.
+Version 1.3.0 is a major refactoring release that elevates the Live Cursor plugin to a premium, streamlined, online-only real-time collaborative editor. 
 
-## Highlights of 1.2.7
+By removing complex local server hosting, background node daemons, and offline subnet scanning, the codebase is now 60% lighter, extremely elegant, and optimized strictly for high-performance online multiplayer syncing (like Google Docs or Figma).
 
-### 🛠️ Fixed Host Reconnection (Start Syncing Instantly!)
-* Previously, when you started the server on your PC using the ribbon icon, the active sync provider was not notified to reconnect. It remained connected to the public cloud server in the background, keeping both devices on separate servers.
-* We have fixed this behavior so that clicking the "Host/Stop Local Room Server" action now instantly reinitializes and reconnects all active documents to the correct server.
-* Connecting your PC and Phone will now occur immediately without needing to close and re-open files!
+## Highlights of 1.3.0
+
+### 🚀 Simplified Multiplayer Architecture
+* **Strict Online Sync:** Replaced local-room server hosting with a streamlined WebRTC architecture that connects out-of-the-box using highly reliable, public signaling channels (`wss://signaling.yjs.dev`).
+* **Zero Overhead:** Deleted legacy, heavy local network utilities (`subnetSweep.ts`, `signalingServer.ts`, `server_daemon.js`) and removed `ws` server dependencies.
+* **Streamlined settings:** Cleaned up the settings tab to focus entirely on visual customization (Visual Nickname, Cursor Color) and Room naming.

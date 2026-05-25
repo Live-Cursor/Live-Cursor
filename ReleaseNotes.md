@@ -1,51 +1,44 @@
-# Release Notes — Version 1.3.2
+# Release Notes — Version 1.3.5
 
-Version 1.3.2 is a **critical connectivity fix** that makes the plugin actually work out of the box.
-
----
-
-## What Was Wrong (and Why 1.3.1 Didn't Work)
-
-The plugin was defaulting to `wss://signaling.yjs.dev` — a **community-run public WebSocket server** that is frequently offline, rate-limited, or blocked. This caused the plugin to silently fail with no feedback, leaving the status bar stuck on "Standby" forever.
+Version 1.3.5 is a **major milestone release** that brings highly anticipated real-time cursor visualizations, a complete synchronization engine for plugins, themes, and settings, a live collaborators roster, and critical stability fixes to the Live Cursor platform.
 
 ---
 
-## What's New in 1.3.2
+## What's New in 1.3.5
 
-### 🏠 Local-First by Default
-The plugin now defaults to **`ws://localhost:4444`** — your own private server — instead of the unreliable public signaling server. No third parties, no rate limits, no downtime.
+### 👥 Real-Time Remote Cursors & Selections (Fully Restored!)
+The signature feature of **Live Cursor** is now fully functional! Real-time collaborator cursors and selection ranges are beautifully visualized directly inside the editor:
+- **Visual Cursor Flags**: Remote collaborator cursors are decorated with their custom username tags and distinct, harmonious colors.
+- **Selection Highlights**: Highlighting text dynamically draws colored selection ranges in the editor of all connected peers.
+- **Under-the-Hood Fixes**:
+  - Resolved a core binding issue where Yjs awareness was not properly propagated to the CodeMirror `yCollab` extension.
+  - Fixed an editor-mount race condition so remote cursors are rendered immediately upon connecting without requiring the peer to move their cursor.
+  - Implemented strict decoration coordinate sorting and safety boundaries to prevent silent CodeMirror `Decoration.set` crashes.
 
-### 🟢 Real Connection Status
-The status bar now shows the **actual connection state** in real time:
-- `🟢 1 synced` — connected and syncing
-- `🟡 Connecting...` — attempting connection
-- `🔴 Disconnected` — connection lost (auto-retry in progress)
-- `⚪ Standby` — no file open yet
+### 🔄 Full Vault Synchronization (Plugins, Themes, Snippets, & Settings)
+Taking collaboration beyond simple text editing, Version 1.3.5 introduces **Full Vault Synchronization**:
+- **Total Workspace Parity**: Real-time sync now manages your entire Obsidian workspace — including themes, CSS snippets, active plugins, and core settings.
+- **Config Sync Engine**: An intelligent background manager hashes configuration files, detects changes, and uploads/downloads workspace updates.
+- **REST Sync API**: The self-hosted server (`server.js`) has been upgraded with lightweight REST endpoints (`/api/manifest`, `/api/upload`, `/api/download`) to handle secure config transfers.
 
-### 🖥️ Start Server from Settings
-New **"▶ Start Local Server"** button in the Settings panel. Click it to launch your private sync server directly from Obsidian — no terminal required (desktop only).
+### 📋 Live Connected Collaborators Roster
+Inside the Settings panel, you can now see exactly who is co-authoring with you:
+- A real-time, reactive list of all active users currently connected to your room.
+- Displays active usernames, distinct connection colors, and internal client IDs for debugging and transparency.
 
-### 🔄 Auto-Retry with Backoff
-If the connection drops, the plugin automatically retries up to 5 times (3s → 6s → 12s → 24s → 60s). After 5 failed attempts, a helpful notice tells you exactly what to do.
-
-### 🔄 Reconnect Button
-New **"Reconnect"** button in Settings to immediately force a reconnection with the current URL — useful after changing settings or starting the server.
-
-### 📱 Mobile Setup Guidance
-The settings panel now shows **clear instructions** for connecting mobile devices, including exactly what command to run to find your PC's local IP.
+### ⚡ Stability & Sync Bug Fixes
+- **Duplicate Text Resolution**: Solved a notorious synchronization issue where text blocks would duplicate or triplicate during concurrent sync handshake processes.
+- **Reliable Reconnections**: Refined the automatic reconnection loops, boosting retries to 20 cycles with intelligent backoff intervals to ensure background processes never drop permanently.
 
 ---
 
 ## How to Use
 
-### Desktop (Same Machine)
-1. Open **Settings → Live Cursor**
-2. Click **"▶ Start Local Server"** — status turns 🟢
-3. Open any note — it syncs automatically
+### 1. Enable Real-Time Text Collaboration
+1. Ensure your self-hosted server is running (click **"▶ Start Local Server"** in Settings or run `node server.js`).
+2. Make sure all devices are connected to the same **Server URL** and use the exact same **Room Name**.
+3. Open any note — you will instantly see your collaborators' cursors, selection marks, and name tags as they type!
 
-### Cross-Device (PC + Phone on Same Wi-Fi)
-1. Start the local server on your PC (step above)
-2. Find your PC's IP: run `ipconfig` in Command Prompt
-3. On each device, set **Server URL** to `ws://YOUR_PC_IP:4444`
-4. Use the same **Room Name** on all devices
-5. Open the same note — cursors appear in real time ✨
+### 2. Syncing Vault Configurations (Plugins, Themes, Settings)
+- The plugin automatically checks and synchronizes your workspace configurations when it transitions to the `🟢 Connected` state.
+- Keep your Obsidian workflow, styling, and keyboard shortcuts completely uniform across your phone, tablet, and desktop without manual intervention!

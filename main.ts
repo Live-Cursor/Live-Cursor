@@ -1,7 +1,7 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, MarkdownView, Notice, debounce } from 'obsidian';
 import * as Y from 'yjs';
 import { Awareness } from 'y-protocols/awareness';
-import { WebrtcProvider } from 'y-webrtc';
+import { WebsocketProvider } from 'y-websocket';
 import { yCollab } from 'y-codemirror.next';
 import { EditorView } from '@codemirror/view';
 import { Compartment, StateEffect } from '@codemirror/state';
@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS: LiveCursorSettings = {
 
 export default class LiveCursorPlugin extends Plugin {
   settings!: LiveCursorSettings;
-  private activeSyncs: Map<string, { doc: Y.Doc, awareness: Awareness, provider?: WebrtcProvider }> = new Map();
+  private activeSyncs: Map<string, { doc: Y.Doc, awareness: Awareness, provider?: WebsocketProvider }> = new Map();
   private simulatorInterval: any = null;
   private statusBarItem: HTMLElement | null = null;
   private diskDebouncers: Map<string, (file: TFile) => void> = new Map();
@@ -127,18 +127,10 @@ export default class LiveCursorPlugin extends Plugin {
           const awareness = sync.awareness;
           
           const fileRoomName = `${this.settings.roomName}-${encodeURIComponent(leaf.view.file.path)}`;
-          const signaling = this.settings.signalingUrl ? [this.settings.signalingUrl] : ['wss://signaling.yjs.dev'];
+          const serverUrl = this.settings.signalingUrl || 'wss://signaling.yjs.dev';
           
-          sync.provider = new WebrtcProvider(fileRoomName, doc, {
-            awareness,
-            signaling,
-            peerOpts: {
-              config: {
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-                iceCandidatePoolSize: 0,
-                iceTransportPolicy: 'all'
-              }
-            }
+          sync.provider = new WebsocketProvider(serverUrl, fileRoomName, doc, {
+            awareness
           });
         }
       }
@@ -243,18 +235,10 @@ export default class LiveCursorPlugin extends Plugin {
 
       // Construct a unique room name per file within the user's workspace
       const fileRoomName = `${this.settings.roomName}-${encodeURIComponent(file.path)}`;
-      const signaling = this.settings.signalingUrl ? [this.settings.signalingUrl] : ['wss://signaling.yjs.dev'];
+      const serverUrl = this.settings.signalingUrl || 'wss://signaling.yjs.dev';
 
-      const provider = new WebrtcProvider(fileRoomName, doc, {
-        awareness,
-        signaling,
-        peerOpts: {
-          config: {
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-            iceCandidatePoolSize: 0,
-            iceTransportPolicy: 'all'
-          }
-        }
+      const provider = new WebsocketProvider(serverUrl, fileRoomName, doc, {
+        awareness
       });
 
       sync = { doc, awareness, provider };
@@ -368,11 +352,11 @@ export default class LiveCursorPlugin extends Plugin {
     }
 
     if (this.simulatorInterval) {
-      this.statusBarItem.setText('🟢 Live Cursor (Simulating)');
+      this.statusBarItem.setText('Live Cursor (Simulating)');
     } else if (activeConnections > 0) {
-      this.statusBarItem.setText(`🟢 Live Cursor (${activeConnections} synced)`);
+      this.statusBarItem.setText(`Live Cursor (${activeConnections} synced)`);
     } else {
-      this.statusBarItem.setText('🟢 Live Cursor (Standby)');
+      this.statusBarItem.setText('Live Cursor (Standby)');
     }
   }
 
@@ -399,47 +383,59 @@ class LiveCursorSettingTab extends PluginSettingTab {
 
     const header = containerEl.createEl('div');
     header.style.marginBottom = '24px';
-    const title = header.createEl('h2', {text: 'Live Cursor Collaboration'});
+    const title = header.createEl('h2', {text: 'Live Cursor Collaboration Settings'});
     title.style.margin = '0 0 6px 0';
+    const subtitle = header.createEl('p', {text: 'Customize your profile and connect your devices for real-time note editing.'});
+    subtitle.style.margin = '0';
+    subtitle.style.fontSize = 'var(--font-ui-small)';
+    subtitle.style.color = 'var(--text-muted)';
+
+    // Section 1: User Profile Settings
+    containerEl.createEl('h3', {text: 'Your Profile', attr: {style: 'margin-top: 18px; margin-bottom: 12px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 6px; font-size: 1.1em;'}});
 
     new Setting(containerEl)
-      .setName('Room Name')
-      .setDesc('A unique identifier for your vault collaboration room. Keep this identical across all devices.')
-      .addText(text => text
-        .setValue(this.plugin.settings.roomName)
-        .onChange(async (val) => {
-          this.plugin.settings.roomName = val;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('Signaling Server URL')
-      .setDesc('The WebSocket URL of your central signaling server. Defaults to wss://signaling.yjs.dev.')
-      .addText(text => text
-        .setValue(this.plugin.settings.signalingUrl)
-        .onChange(async (val) => {
-          this.plugin.settings.signalingUrl = val;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('Visual Nickname')
-      .setDesc('Your display name shown to other editors in the vault.')
+      .setName('Collaborator Nickname')
+      .setDesc('The name that other editors see floating next to your typing cursor.')
       .addText(text => text
         .setPlaceholder('Anonymous Editor')
         .setValue(this.plugin.settings.nickname)
         .onChange(async (val) => {
-          this.plugin.settings.nickname = val;
+          this.plugin.settings.nickname = val || 'Anonymous';
           await this.plugin.saveSettings();
         }));
 
     new Setting(containerEl)
-      .setName('Cursor Color')
-      .setDesc('Your cursor color shown in real-time to other editors.')
+      .setName('Cursor Highlight Color')
+      .setDesc('The color of your real-time cursor flag and text selections shown to other editors.')
       .addColorPicker(color => color
         .setValue(this.plugin.settings.cursorColor)
         .onChange(async (val) => {
           this.plugin.settings.cursorColor = val;
+          await this.plugin.saveSettings();
+        }));
+
+    // Section 2: Connection & Collaboration Settings
+    containerEl.createEl('h3', {text: 'Collaboration & Connection', attr: {style: 'margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 6px; font-size: 1.1em;'}});
+
+    new Setting(containerEl)
+      .setName('Room Name')
+      .setDesc('To collaborate, enter the exact same room name on all your devices (e.g., "shared-notes").')
+      .addText(text => text
+        .setPlaceholder('default-live-cursor-room')
+        .setValue(this.plugin.settings.roomName)
+        .onChange(async (val) => {
+          this.plugin.settings.roomName = val || 'default-live-cursor-room';
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Server Connection URL')
+      .setDesc('The address that links your devices together. Keep blank to use the secure public cloud server (wss://signaling.yjs.dev), or enter your private self-hosted server.')
+      .addText(text => text
+        .setPlaceholder('wss://signaling.yjs.dev')
+        .setValue(this.plugin.settings.signalingUrl)
+        .onChange(async (val) => {
+          this.plugin.settings.signalingUrl = val;
           await this.plugin.saveSettings();
         }));
   }

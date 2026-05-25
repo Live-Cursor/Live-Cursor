@@ -1,8 +1,8 @@
-FROM node:18-alpine
+FROM node:20-alpine
 WORKDIR /app
-COPY server_daemon.js ./
-RUN npm install ws yjs lib0 y-protocols y-websocket
-EXPOSE 1234
+COPY server.js ./
+RUN npm install ws yjs y-websocket
+EXPOSE 4444
+ENV PORT=4444
 ENV DB_DIR=/app/data
-ENV PORT=1234
-CMD ["node", "server_daemon.js"]
+CMD ["node", "server.js"]

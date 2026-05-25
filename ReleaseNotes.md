@@ -1,6 +1,8 @@
-# Release Notes - Version 1.2.3
+# Release Notes - Version 1.2.4
 
-Version 1.2.3 introduces a massive architectural overhaul to the Live Cursor plugin, prioritizing performance, reliability, and true offline-first capability on constrained networks.
+Version 1.2.4 introduces a massive architectural overhaul to the Live Cursor plugin, prioritizing performance, reliability, and true offline-first capability on constrained networks.
+
+**Hotfix (1.2.4)**: Prevented mobile browser socket exhaustion by batching the Subnet Sweep algorithm to run subnets sequentially instead of firing 1,270 simultaneous connections.
 
 **Hotfix (1.2.3)**: Fixed a critical bug where the plugin completely failed to load on Obsidian Mobile (Android/iOS) due to unauthorized top-level Node.js imports. Also injected fallback IPs allowing mobile devices to sweep Android & iOS hotspot networks without requiring native Node OS bindings!
 

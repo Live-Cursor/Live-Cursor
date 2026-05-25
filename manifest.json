@@ -1,7 +1,7 @@
 {
   "id": "live-cursor",
   "name": "Live-Cursor",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "minAppVersion": "1.4.0",
   "description": "A free, open-source, privacy-first collaborative sync plugin.",
   "author": "Live-Cursor",

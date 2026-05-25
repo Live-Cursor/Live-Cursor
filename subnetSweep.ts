@@ -106,26 +106,27 @@ export class SubnetSweeper {
     new Notice('Sweeping local network to find Host...');
     console.log('[LiveCursor] Local IPs found:', localIPs);
 
-    const allPromises: Promise<string>[] = [];
+    const subnets = Array.from(bases);
 
-    bases.forEach(base => {
+    for (const base of subnets) {
+      const allPromises: Promise<string>[] = [];
       for (let i = 1; i < 255; i++) {
         const targetIP = `${base}${i}`;
         if (!localIPs.includes(targetIP)) {
           allPromises.push(this.checkWebSocket(targetIP));
         }
       }
-    });
-
-    try {
-      // Promise.any resolves as soon as ANY of the websockets connects successfully
-      const foundUrl = await Promise.any(allPromises);
-      this.closeAllSockets();
-      return foundUrl;
-    } catch (e) {
-      // AggregateError if all promises reject
-      this.closeAllSockets();
-      return null;
+      
+      try {
+        const foundUrl = await Promise.any(allPromises);
+        this.closeAllSockets();
+        return foundUrl;
+      } catch (e) {
+        // This subnet failed (timeout or error), clean up and try the next base
+        this.closeAllSockets();
+      }
     }
+
+    return null;
   }
 }

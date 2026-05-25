@@ -1,5 +1,5 @@
 import * as os from 'os';
-import { WebSocket } from './node_modules/ws/index.js';
+import { WebSocket } from 'ws';
 import { Notice } from 'obsidian';
 
 export class SubnetSweeper {

@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
-import { builtinModules } from "module";
+import { builtinModules, createRequire } from "module";
+
+const require = createRequire(import.meta.url);
 
 const banner =
 `/*
@@ -48,7 +50,8 @@ const context = await esbuild.context({
 		"buffer": "buffer",
 		"events": "events",
 		"stream": "stream-browserify",
-		"util": "util"
+		"util": "util",
+		"ws": require.resolve("ws")
 	},
 	inject: ["./process-shim.js"],
 	define: {

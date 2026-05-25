@@ -346,7 +346,7 @@ export default class LiveCursorPlugin extends Plugin {
 
     let activeConnections = 0;
     for (const sync of this.activeSyncs.values()) {
-      if (sync.provider && sync.provider.connected) {
+      if (sync.provider && sync.provider.wsconnected) {
         activeConnections++;
       }
     }

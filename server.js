@@ -105,7 +105,7 @@ server.listen(port, '0.0.0.0', () => {
   console.log('===================================================');
   console.log('      LIVE CURSOR PRIVATE SYNC & DATABASE SERVER     ');
   console.log('===================================================');
-  console.log(`[*] Version: 1.3.0`);
+  console.log(`[*] Version: 1.3.1`);
   console.log(`[*] Mode: Production (Docker)`);
   console.log(`[*] Port: ${port}`);
   console.log(`[*] Database Directory: ${dbDir}`);

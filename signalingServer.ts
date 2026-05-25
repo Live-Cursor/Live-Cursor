@@ -1,4 +1,4 @@
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, WebSocket } from './node_modules/ws/index.js';
 import * as http from 'http';
 import { Notice } from 'obsidian';
 

@@ -39,7 +39,9 @@ const context = await esbuild.context({
 		"net",
 		"tls",
 		"http",
-		"https"
+		"https",
+		"zlib",
+		"url"
 	],
 	alias: {
 		"process": "process",

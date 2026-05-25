@@ -340,24 +340,6 @@ export default class LiveCursorPlugin extends Plugin {
     const doc = new Y.Doc();
     const ytext = doc.getText('content');
 
-    const localContent = await this.app.vault.read(file);
-    if (ytext.toString() !== localContent) {
-      ytext.insert(0, localContent);
-    }
-
-    // Write remote changes back to disk if the file isn't open
-    ytext.observe((event, transaction) => {
-      if (!transaction.local) {
-        let isOpen = false;
-        this.app.workspace.iterateAllLeaves((leaf) => {
-          if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) isOpen = true;
-        });
-        if (!isOpen) {
-          this.app.vault.modify(file, ytext.toString()).catch(e => console.error(e));
-        }
-      }
-    });
-
     const awareness = new Awareness(doc);
     awareness.setLocalStateField('user', {
       name: this.settings.nickname,
@@ -369,6 +351,43 @@ export default class LiveCursorPlugin extends Plugin {
     const serverUrl = this.settings.signalingUrl.trim() || 'ws://localhost:4444';
 
     const provider = new WebsocketProvider(serverUrl, fileRoomName, doc, { awareness });
+
+    const sync = { doc, awareness, provider };
+    this.activeSyncs.set(file.path, sync);
+    this.updateStatusBar();
+
+    // Prevent duplicate initializations and wait for WebSocket sync OR offline fallback
+    let hasInitialized = false;
+    const initializeCollab = async () => {
+      if (hasInitialized) return;
+      hasInitialized = true;
+
+      const currentLocalContent = await this.app.vault.read(file);
+      if (ytext.toString() === '') {
+        ytext.insert(0, currentLocalContent);
+      } else if (ytext.toString() !== currentLocalContent) {
+        reconcileYText(ytext, currentLocalContent);
+      }
+
+      this.configureEditorForFile(file);
+
+      // Write remote changes back to disk if the file isn't open
+      ytext.observe((event, transaction) => {
+        if (!transaction.local) {
+          let isOpen = false;
+          this.app.workspace.iterateAllLeaves((leaf) => {
+            if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) isOpen = true;
+          });
+          if (!isOpen) {
+            this.app.vault.modify(file, ytext.toString()).catch(e => console.error(e));
+          }
+        }
+      });
+    };
+
+    provider.on('sync', (isSynced: boolean) => {
+      if (isSynced) initializeCollab();
+    });
 
     // ── Real connection status tracking ──
     provider.on('status', ({ status }: { status: string }) => {
@@ -384,14 +403,11 @@ export default class LiveCursorPlugin extends Plugin {
       } else if (status === 'disconnected') {
         this.connectionStatus = 'disconnected';
         this.scheduleRetry(file, fileRoomName, doc, awareness, 0);
+        // If we fail to connect, initialize offline immediately
+        initializeCollab();
       }
       this.updateStatusBar();
     });
-
-    const sync = { doc, awareness, provider };
-    this.activeSyncs.set(file.path, sync);
-    this.updateStatusBar();
-    this.configureEditorForFile(file);
   }
 
   // ─────────────────────────────────────────────

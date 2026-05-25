@@ -208,7 +208,7 @@ const presenceStateField = (awareness: any) =>
       // Transform objects into CodeMirror Range decorators
       const cmDecos = decos.map((d) => d.deco.range(d.from, d.to));
 
-      return Decoration.set(cmDecos);
+      return Decoration.set(cmDecos, true);
     },
 
     provide(field) {

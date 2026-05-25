@@ -616,6 +616,42 @@ class LiveCursorSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
+    // ── Section: Active Collaborators ──
+    containerEl.createEl('h3', { text: '👥 Connected Collaborators', attr: { style: sectionHeaderStyle() } });
+
+    const activeUsers = new Map<string, { name: string, color: string }>();
+    for (const sync of this.plugin.activeSyncs.values()) {
+      for (const [clientId, state] of sync.awareness.getStates().entries()) {
+        if (clientId === sync.awareness.clientID) continue;
+        if (state.user?.name) {
+          activeUsers.set(state.user.name, state.user);
+        }
+      }
+    }
+
+    const usersContainer = containerEl.createEl('div');
+    usersContainer.style.cssText = 'padding: 10px 14px; background: var(--background-secondary); border-radius: 8px; border: 1px solid var(--background-modifier-border); margin-bottom: 16px;';
+
+    if (activeUsers.size === 0) {
+      const emptyMsg = usersContainer.createEl('div', { text: 'No other collaborators are currently connected.' });
+      emptyMsg.style.color = 'var(--text-muted)';
+      emptyMsg.style.fontStyle = 'italic';
+      emptyMsg.style.fontSize = 'var(--font-ui-small)';
+    } else {
+      const listEl = usersContainer.createEl('ul', { attr: { style: 'margin: 0; padding-left: 0; list-style: none;' } });
+      for (const user of activeUsers.values()) {
+        const li = listEl.createEl('li');
+        li.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px;';
+        
+        const dot = li.createEl('span');
+        dot.style.cssText = `display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${user.color}; box-shadow: 0 0 4px ${user.color}88;`;
+        
+        const nameEl = li.createEl('span', { text: user.name });
+        nameEl.style.fontWeight = '500';
+      }
+      listEl.lastElementChild?.setAttribute('style', listEl.lastElementChild.getAttribute('style') + ' margin-bottom: 0;');
+    }
+
     // ── Section: Local Server ──
     containerEl.createEl('h3', { text: '🖥️ Local Sync Server', attr: { style: sectionHeaderStyle() } });
 

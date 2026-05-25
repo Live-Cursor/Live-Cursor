@@ -1,26 +1,14 @@
-# Release Notes - Version 1.2.4
+# Release Notes - Version 1.2.5
 
-Version 1.2.4 introduces a massive architectural overhaul to the Live Cursor plugin, prioritizing performance, reliability, and true offline-first capability on constrained networks.
+Version 1.2.5 brings crucial network optimization and stability fixes to make local network collaboration seamless and reliable, especially on mobile devices.
 
-**Hotfix (1.2.4)**: Prevented mobile browser socket exhaustion by batching the Subnet Sweep algorithm to run subnets sequentially instead of firing 1,270 simultaneous connections.
+## Highlights of 1.2.5
 
-**Hotfix (1.2.3)**: Fixed a critical bug where the plugin completely failed to load on Obsidian Mobile (Android/iOS) due to unauthorized top-level Node.js imports. Also injected fallback IPs allowing mobile devices to sweep Android & iOS hotspot networks without requiring native Node OS bindings!
+### 🚀 Batched Subnet Sweeping (Mobile Network Fix)
+Previously, the "Find Local Host on Subnet" feature fired 254 simultaneous WebSocket connection attempts to scan the local subnet. While this works on powerful desktop environments, mobile WebViews (on both iOS and Android) have strict browser-level concurrent socket limits. This led to silent connection queueing, timeouts, and failure to discover the host even when it was on the same network. 
+* We have refactored the discovery engine to scan in **highly efficient, controlled batches of 30 concurrent sockets**.
+* This avoids mobile OS throttling, prevents browser socket exhaustion, and allows the phone to find your PC's local server in seconds.
 
-**Hotfix (1.2.2)**: Fixed a silent crash where the Local Room Signaling Server would fail to start because the `ws` package was incorrectly bundled for the browser.
-
-## Core Architectural Improvements
-
-### WebRTC ICE Gathering Fix (Offline Hang Resolved)
-Standard WebRTC implementations inherently wait for external STUN servers (like Google's) to resolve before establishing a connection. On a completely disconnected local network, this caused debilitating delays and hanging connections. We have introduced explicit WebRTC Configuration (`peerOpts`) that injects a short-circuit policy. By enforcing Trickle ICE with an `iceTransportPolicy` of `all` and `iceCandidatePoolSize: 0`, the plugin immediately prioritizes host (LAN) candidates. Connections over offline Android hotspots now occur in milliseconds.
-
-### Strict Obsidian Lifecycle Memory Management
-Obsidian's fluid workspace model means users frequently switch, split, and close panes. Previous iterations left orphaned `Y.Doc` and `WebrtcProvider` instances running in the background when a file was closed, leading to memory leaks and "ghost cursors". We implemented a strict garbage collection routine hooked directly into Obsidian's `layout-change` event. The plugin now actively monitors all panes; if a synchronized file is no longer active in any leaf, its WebRTC channels are immediately disconnected and the CRDT document is destroyed.
-
-### Prevented Subnet Sweep Socket Exhaustion
-To bypass Android mDNS blocking, the plugin utilizes an aggressive 255-address subnet sweep using raw WebSockets. In v1.2.3, we introduced a socket cleanup mechanism. As soon as `Promise.any` resolves the single winning connection to the host, the remaining 254 pending WebSocket connections are instantly aborted via `.close()`. This strictly prevents socket exhaustion and memory saturation on constrained mobile devices.
-
-### Debounced Disk Sync Loop
-Synchronizing an in-memory CRDT with physical `.md` files poses the risk of an infinite feedback loop (CRDT writes to disk -> disk modify triggers CRDT -> CRDT writes to disk). We have wrapped the Obsidian `vault.on('modify')` listener in a strict 300ms debounce loop per file. This ensures rapid disk writes are throttled, providing safe, bidirectional state reconciliation between the Yjs document and the physical file system without crashing the editor.
-
-### TypeScript Compilation Target
-Upgraded the compilation target and library to `ES2021` to provide native support for modern JavaScript APIs (`Promise.any`), ensuring cleaner compiled output and stability.
+### 🛠️ TypeScript & IDE Environment Stability
+* Fixed an issue where the IDE/compiler could report `"Cannot find name 'require'"` due to empty typescript types.
+* Updated `tsconfig.json` to explicitly register Node typings while retaining standard bundler settings.

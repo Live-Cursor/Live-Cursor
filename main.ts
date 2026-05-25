@@ -311,6 +311,9 @@ export default class LiveCursorPlugin extends Plugin {
   async toggleLocalServer() {
     if (this.localSignalingServer.isRunning()) {
       this.localSignalingServer.stop();
+      this.settings.signalingUrl = 'wss://signaling.yjs.dev';
+      await this.saveSettings();
+      this.reconnectAll();
     } else {
       try {
         await this.localSignalingServer.start();
@@ -318,6 +321,7 @@ export default class LiveCursorPlugin extends Plugin {
         this.settings.signalingUrl = 'ws://localhost:4444';
         await this.saveSettings();
         new Notice('Signaling URL updated to local host.');
+        this.reconnectAll();
       } catch (e) {
         // Error is handled inside the start promise
       }

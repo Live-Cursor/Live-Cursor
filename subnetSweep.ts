@@ -85,11 +85,63 @@ export class SubnetSweeper {
     this.activeSockets = [];
   }
 
+  private async getMobileLocalIPs(): Promise<string[]> {
+    return new Promise((resolve) => {
+      const ips: string[] = [];
+      try {
+        const RTCPeerConnection =
+          (window as any).RTCPeerConnection ||
+          (window as any).webkitRTCPeerConnection ||
+          (window as any).mozRTCPeerConnection;
+        if (!RTCPeerConnection) {
+          resolve([]);
+          return;
+        }
+        
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.createDataChannel('');
+        pc.createOffer()
+          .then((offer: any) => pc.setLocalDescription(offer))
+          .catch(() => {});
+
+        pc.onicecandidate = (ice: any) => {
+          if (ice && ice.candidate && ice.candidate.candidate) {
+            const candidate = ice.candidate.candidate;
+            // Match IPv4 addresses
+            const match = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(candidate);
+            if (match && match[1]) {
+              const ip = match[1];
+              if (ip !== '127.0.0.1' && !ip.startsWith('0.')) {
+                if (!ips.includes(ip)) {
+                  ips.push(ip);
+                }
+              }
+            }
+          }
+        };
+
+        // Give WebRTC 800ms to gather local ICE candidates
+        setTimeout(() => {
+          try {
+            pc.close();
+          } catch (e) {}
+          resolve(ips);
+        }, 800);
+      } catch (e) {
+        resolve([]);
+      }
+    });
+  }
+
   public async findHost(): Promise<string | null> {
     const localIPs = this.getLocalIPs();
     
+    // Attempt dynamic WebRTC local IP gathering for mobile environments
+    const mobileIPs = await this.getMobileLocalIPs();
+    const allIPs = [...localIPs, ...mobileIPs];
+    
     let bases = new Set<string>();
-    localIPs.forEach(ip => {
+    allIPs.forEach(ip => {
       const parts = ip.split('.');
       if (parts.length === 4) {
         bases.add(`${parts[0]}.${parts[1]}.${parts[2]}.`);
@@ -104,7 +156,7 @@ export class SubnetSweeper {
     bases.add('172.20.10.');  // iOS
 
     new Notice('Sweeping local network to find Host...');
-    console.log('[LiveCursor] Local IPs found:', localIPs);
+    console.log('[LiveCursor] Local/Mobile IPs found:', allIPs);
 
     const subnets = Array.from(bases);
 

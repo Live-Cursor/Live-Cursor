@@ -1,14 +1,11 @@
-# Release Notes - Version 1.2.5
+# Release Notes - Version 1.2.6
 
-Version 1.2.5 brings crucial network optimization and stability fixes to make local network collaboration seamless and reliable, especially on mobile devices.
+Version 1.2.6 introduces smart, dynamic subnet discovery for mobile clients, enabling automatic host detection even on custom cellular hotspots.
 
-## Highlights of 1.2.5
+## Highlights of 1.2.6
 
-### 🚀 Batched Subnet Sweeping (Mobile Network Fix)
-Previously, the "Find Local Host on Subnet" feature fired 254 simultaneous WebSocket connection attempts to scan the local subnet. While this works on powerful desktop environments, mobile WebViews (on both iOS and Android) have strict browser-level concurrent socket limits. This led to silent connection queueing, timeouts, and failure to discover the host even when it was on the same network. 
-* We have refactored the discovery engine to scan in **highly efficient, controlled batches of 30 concurrent sockets**.
-* This avoids mobile OS throttling, prevents browser socket exhaustion, and allows the phone to find your PC's local server in seconds.
-
-### 🛠️ TypeScript & IDE Environment Stability
-* Fixed an issue where the IDE/compiler could report `"Cannot find name 'require'"` due to empty typescript types.
-* Updated `tsconfig.json` to explicitly register Node typings while retaining standard bundler settings.
+### 📡 Dynamic WebRTC Local IP Detection
+* Mobile devices historically cannot access Node's `os` network interface APIs. Because of this, the plugin had to rely on a hardcoded list of common hotspot subnets (like `192.168.43.x` or `172.20.10.x`).
+* If a mobile carrier or device used a custom IP range (e.g. `10.231.66.x`), discovery would fail to scan the correct subnet.
+* We have introduced a **dynamic WebRTC ICE local IP resolver** for mobile clients. The plugin will now temporarily query the browser's peer connection stack to determine the phone's exact local interface IP and automatically sweep the matching subnet base.
+* This works automatically without requiring any manual entry or hardcoded lists!

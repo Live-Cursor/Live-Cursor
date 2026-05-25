@@ -309,29 +309,47 @@ export default class LiveCursorPlugin extends Plugin {
     const bind = () => {
       let bound = false;
       this.app.workspace.iterateAllLeaves((leaf) => {
+        if (bound) return;
         if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) {
           const cm = (leaf.view.editor as any).cm as EditorView;
-          if (cm) {
-            let compartment = (cm as any)._liveCursorCompartment;
-            if (!compartment) {
-              compartment = new Compartment();
-              (cm as any)._liveCursorCompartment = compartment;
-              cm.dispatch({ effects: StateEffect.appendConfig.of(compartment.of([])) });
-            }
-            const ytext = sync.doc.getText('content');
-            cm.dispatch({
-              effects: compartment.reconfigure([
-                yCollab(ytext, null),
-                collaborationExtension(sync.awareness)
-              ])
-            });
-            bound = true;
+          if (!cm) return;
+
+          // Create or reuse the compartment stored on the CM instance
+          let compartment = (cm as any)._liveCursorCompartment as Compartment | undefined;
+          if (!compartment) {
+            compartment = new Compartment();
+            (cm as any)._liveCursorCompartment = compartment;
+            cm.dispatch({ effects: StateEffect.appendConfig.of(compartment.of([])) });
           }
+
+          const ytext = sync.doc.getText('content');
+
+          // Pass awareness to yCollab so it handles undo stack awareness and
+          // also pass it to our own extension so cursors render.
+          cm.dispatch({
+            effects: compartment.reconfigure([
+              yCollab(ytext, sync.awareness),
+              collaborationExtension(sync.awareness)
+            ])
+          });
+
+          // Force an immediate awareness dispatch so remote cursors
+          // appear without needing any mouse movement
+          setTimeout(() => {
+            if (!cm.isDestroyed) {
+              sync.awareness.setLocalState(sync.awareness.getLocalState());
+            }
+          }, 100);
+
+          bound = true;
+          console.log(`[LiveCursor] Editor bound for ${file.path}`);
         }
       });
-      if (!bound && retries < 15) {
+      if (!bound && retries < 20) {
         retries++;
-        setTimeout(bind, 50);
+        setTimeout(bind, 100);
+      } else if (!bound) {
+        console.warn(`[LiveCursor] Could not bind editor for ${file.path} after ${retries} retries`);
       }
     };
     bind();

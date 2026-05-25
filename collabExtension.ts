@@ -6,64 +6,74 @@ const awarenessEffect = StateEffect.define<void>();
 
 /**
  * Premium cursor widget rendering a dynamic blinking caret with a floating username badge.
- * Features automatic activity-based fade-out and hover-based recovery.
  */
 class CursorWidget extends WidgetType {
   constructor(private name: string, private color: string) {
     super();
   }
 
+  eq(other: CursorWidget): boolean {
+    return other.name === this.name && other.color === this.color;
+  }
+
   toDOM(): HTMLElement {
     const cursorContainer = document.createElement('span');
     cursorContainer.className = 'cm-remote-cursor-container';
-    cursorContainer.style.position = 'relative';
-    cursorContainer.style.userSelect = 'none';
+    cursorContainer.setAttribute('data-collab-user', this.name);
+    cursorContainer.style.cssText = 'position: relative; display: inline-block; width: 0; overflow: visible; vertical-align: text-bottom; pointer-events: none; z-index: 200;';
 
-    // The vertical colored caret line matching editor text size
+    // The vertical colored caret line
     const cursorCaret = document.createElement('span');
     cursorCaret.className = 'cm-remote-cursor-caret';
-    cursorCaret.style.borderLeft = `2px solid ${this.color}`;
-    cursorCaret.style.position = 'absolute';
-    cursorCaret.style.height = '1.2em';
-    cursorCaret.style.top = '-0.1em';
-    cursorCaret.style.zIndex = '100';
+    cursorCaret.style.cssText = `
+      position: absolute;
+      border-left: 2px solid ${this.color};
+      height: 1.35em;
+      top: -0.05em;
+      left: 0;
+      z-index: 200;
+      pointer-events: none;
+      animation: cm-live-cursor-blink 1.2s step-start infinite;
+    `;
 
-    // Small colored circle connector dot at the top of the caret
+    // Colored dot at top of caret
     const cursorDot = document.createElement('span');
-    cursorDot.className = 'cm-remote-cursor-dot';
-    cursorDot.style.position = 'absolute';
-    cursorDot.style.width = '6px';
-    cursorDot.style.height = '6px';
-    cursorDot.style.borderRadius = '50%';
-    cursorDot.style.background = this.color;
-    cursorDot.style.top = '-3px';
-    cursorDot.style.left = '-3px'; // Centered over 2px border caret line
+    cursorDot.style.cssText = `
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50% 50% 50% 0;
+      background: ${this.color};
+      top: -7px;
+      left: -1px;
+    `;
 
-    // Persistent floating username flag badge (never fades out)
+    // Username label above the cursor
     const cursorFlag = document.createElement('span');
     cursorFlag.className = 'cm-remote-cursor-flag';
     cursorFlag.textContent = this.name;
-    cursorFlag.style.position = 'absolute';
-    cursorFlag.style.left = '-1px'; // Aligns perfectly with the left border caret
-    cursorFlag.style.bottom = 'calc(100% - 2px)'; // Fuses bottom of flag flush with top of caret/dot
-    cursorFlag.style.background = this.color;
-    cursorFlag.style.color = '#ffffff';
-    cursorFlag.style.fontSize = '11px';
-    cursorFlag.style.fontWeight = '600';
-    cursorFlag.style.padding = '2px 6px';
-    // Rounded bubble styling with bottom-left corner sharp to act as indicator pin
-    cursorFlag.style.borderRadius = '0px 4px 4px 4px';
-    cursorFlag.style.whiteSpace = 'nowrap';
-    cursorFlag.style.opacity = '1'; // Persistent (always visible)
-    cursorFlag.style.pointerEvents = 'none';
-    cursorFlag.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.2)';
-    cursorFlag.style.fontFamily = 'var(--font-interface), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    cursorFlag.style.lineHeight = '1.2';
+    cursorFlag.style.cssText = `
+      position: absolute;
+      left: -1px;
+      top: -1.7em;
+      background: ${this.color};
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px 2px 5px;
+      border-radius: 3px 3px 3px 0;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.4;
+      z-index: 201;
+      user-select: none;
+    `;
 
     cursorCaret.appendChild(cursorDot);
     cursorCaret.appendChild(cursorFlag);
     cursorContainer.appendChild(cursorCaret);
-
     return cursorContainer;
   }
 
@@ -72,50 +82,50 @@ class CursorWidget extends WidgetType {
   }
 }
 
-// 2. Custom CSS animations and rules
-const collabTheme = EditorView.theme({
-  '@keyframes cm-cursor-blink': {
-    '0%, 100%': { opacity: 1 },
-    '50%': { opacity: 0.3 }
+// 2. CSS animations injected into CodeMirror theme
+const collabTheme = EditorView.baseTheme({
+  '@keyframes cm-live-cursor-blink': {
+    '0%, 100%': { opacity: '1' },
+    '50%': { opacity: '0.15' }
   },
-  '.cm-remote-cursor-container': {
-    display: 'inline-block',
-    width: '0',
-    overflow: 'visible',
-    verticalAlign: 'middle'
+  '.cm-remote-selection': {
+    borderRadius: '2px'
   }
 });
 
-// 3. Selection Tracker: Writes local movements to Yjs Awareness
+// 3. Broadcasts local cursor position to remote peers via Yjs Awareness.
+//    Fires on every selection change or document update.
 const localSelectionTracker = (awareness: any) =>
   ViewPlugin.fromClass(
     class {
       constructor(view: EditorView) {
-        this.trackSelection(view);
+        // Immediately broadcast on mount so remote peers see us right away
+        this.pushCursor(view);
       }
 
       update(update: ViewUpdate) {
         if (update.selectionSet || update.docChanged) {
-          this.trackSelection(update.view);
+          this.pushCursor(update.view);
         }
       }
 
-      trackSelection(view: EditorView) {
-        const selection = view.state.selection.main;
-        const currentCursor = awareness.getLocalStateField('cursor');
+      pushCursor(view: EditorView) {
+        const sel = view.state.selection.main;
+        awareness.setLocalStateField('cursor', {
+          anchor: sel.anchor,
+          head: sel.head
+        });
+      }
 
-        // Prevent redundant state updates
-        if (!currentCursor || currentCursor.anchor !== selection.anchor || currentCursor.head !== selection.head) {
-          awareness.setLocalStateField('cursor', {
-            anchor: selection.anchor,
-            head: selection.head
-          });
-        }
+      destroy() {
+        // Clear cursor so remote peers stop showing a stale cursor
+        awareness.setLocalStateField('cursor', null);
       }
     }
   );
 
-// 4. Awareness Remote Listener: Triggers CodeMirror updates on awareness change
+// 4. Remote Awareness Listener: re-triggers the StateField when any awareness event fires.
+//    Uses setTimeout(0) to defer dispatch outside the current CM transaction cycle.
 const remoteAwarenessListener = (awareness: any) =>
   ViewPlugin.fromClass(
     class {
@@ -123,15 +133,22 @@ const remoteAwarenessListener = (awareness: any) =>
 
       constructor(private view: EditorView) {
         this.listener = () => {
+          // Immediately fire an initial sync when mounted
           setTimeout(() => {
             if (!this.view.isDestroyed) {
-              this.view.dispatch({
-                effects: awarenessEffect.of()
-              });
+              this.view.dispatch({ effects: awarenessEffect.of() });
             }
           }, 0);
         };
+
         awareness.on('change', this.listener);
+
+        // Fire once on mount to pick up any states already in awareness
+        setTimeout(() => {
+          if (!this.view.isDestroyed) {
+            this.view.dispatch({ effects: awarenessEffect.of() });
+          }
+        }, 50);
       }
 
       destroy() {
@@ -140,79 +157,81 @@ const remoteAwarenessListener = (awareness: any) =>
     }
   );
 
-// 5. Presence Decorator StateField: Resolves active remote selections and cursors
+// 5. Presence StateField: reads awareness and renders remote cursors and selections
 const presenceStateField = (awareness: any) =>
   StateField.define<DecorationSet>({
     create() {
       return Decoration.none;
     },
 
-    update(decorations, tr) {
-      // Step 1: Map existing decoration offsets to support local modifications gracefully
-      decorations = decorations.map(tr.changes);
-
-      // Step 2: Rebuild decorations on awareness changes or document updates
+    update(_, tr) {
+      // Only rebuild on awareness trigger OR doc change (to remap positions)
       const updatedByAwareness = tr.effects.some((e) => e.is(awarenessEffect));
       if (!updatedByAwareness && !tr.docChanged) {
-        return decorations;
+        return _.map(tr.changes);
       }
 
-      const docLength = tr.state.doc.length;
+      const docLength = tr.newDoc.length;
       const localClientId = awareness.clientID;
-      const decos: any[] = [];
+      const decos: Array<{ from: number; to: number; deco: any }> = [];
 
-      // Loop through all active collaborator states
-      for (const [clientId, state] of awareness.getStates().entries()) {
+      const states = awareness.getStates();
+
+      for (const [clientId, state] of states.entries()) {
+        // Skip our own state
         if (clientId === localClientId) continue;
 
-        const user = state.user;
-        const cursor = state.cursor;
+        const user = state?.user;
+        const cursor = state?.cursor;
 
-        if (!user || !cursor) continue;
+        if (!user?.name || !cursor) continue;
+        if (cursor.head === null || cursor.head === undefined) continue;
 
-        const anchor = cursor.anchor;
-        const head = cursor.head;
+        const anchor = Math.max(0, Math.min(cursor.anchor ?? cursor.head, docLength));
+        const head   = Math.max(0, Math.min(cursor.head, docLength));
 
-        if (typeof anchor !== 'number' || typeof head !== 'number') continue;
-        if (anchor < 0 || anchor > docLength || head < 0 || head > docLength) continue;
-
-        const color = user.color || '#6366f1';
+        const color      = user.color      || '#6366f1';
         const colorLight = user.colorLight || `${color}33`;
 
-        // Render Selection Range Highlight
+        // Render selection highlight if there's a range
         if (anchor !== head) {
           const from = Math.min(anchor, head);
-          const to = Math.max(anchor, head);
+          const to   = Math.max(anchor, head);
           decos.push({
             from,
             to,
             deco: Decoration.mark({
+              class: 'cm-remote-selection',
               attributes: {
-                class: 'cm-remote-selection',
-                style: `background-color: ${colorLight}; border-bottom: 1px dashed ${color}`
+                style: `background-color: ${colorLight}; border-bottom: 1px dashed ${color};`
               }
             })
           });
         }
 
-        // Render Cursor Widget at cursor head
+        // Render cursor widget at the head position
         decos.push({
           from: head,
-          to: head,
+          to:   head,
           deco: Decoration.widget({
-            widget: new CursorWidget(user.name || 'Collaborator', color),
-            side: 1
+            widget: new CursorWidget(user.name, color),
+            side: 1,
+            block: false
           })
         });
       }
 
-      // CodeMirror requires decorations in the DecorationSet to be strictly sorted by start position
-      decos.sort((a, b) => a.from - b.from);
+      // Sort strictly by from position (required by CodeMirror)
+      decos.sort((a, b) => a.from !== b.from ? a.from - b.from : a.to - b.to);
 
-      // Transform objects into CodeMirror Range decorators
-      const cmDecos = decos.map((d) => d.deco.range(d.from, d.to));
+      const ranges = decos.map((d) => d.deco.range(d.from, d.to));
 
-      return Decoration.set(cmDecos, true);
+      try {
+        return Decoration.set(ranges, true);
+      } catch (e) {
+        console.warn('[LiveCursor] Decoration.set failed, returning none:', e);
+        return Decoration.none;
+      }
     },
 
     provide(field) {
@@ -222,7 +241,7 @@ const presenceStateField = (awareness: any) =>
 
 /**
  * Packaged collaboration extension bundle.
- * Binds CodeMirror 6 to Yjs Awareness.
+ * Binds CodeMirror 6 to Yjs Awareness for real-time cursor & selection rendering.
  */
 export function collaborationExtension(awareness: any): Extension[] {
   return [

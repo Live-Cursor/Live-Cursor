@@ -457,7 +457,7 @@ class LiveCursorSettingTab extends PluginSettingTab {
 
     const header = containerEl.createEl('div');
     header.style.marginBottom = '24px';
-    const title = header.createEl('h2', {text: 'Live Cursor Collaboration (Step 2: WebRTC)'});
+    const title = header.createEl('h2', {text: 'Live Cursor Collaboration'});
     title.style.margin = '0 0 6px 0';
 
     new Setting(containerEl)

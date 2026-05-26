@@ -60,10 +60,10 @@ export class ConfigSyncEngine {
 
   constructor(
     private app: App,
-    private serverUrl: string,
+    public serverUrl: string,
     private user: string,
     private pass: string,
-    private workspace: string = 'default-workspace',
+    public workspace: string = 'default-workspace',
     private deviceName: string = 'Unknown Device'
   ) {}
 

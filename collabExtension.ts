@@ -14,70 +14,66 @@ import * as Y from 'yjs';
  * 
  * We override the default hide-until-hover behaviour so the name is always visible.
  */
-const collabTheme = EditorView.baseTheme({
+const collabTheme = EditorView.theme({
   // ── Cursor caret ────────────────────────────────────────────────────────────
   '.cm-ySelectionCaret': {
-    position: 'relative',
-    borderLeft: '2px solid',          // colour is set inline by the library
-    borderRight: 'none',
-    marginLeft: '-1px',
-    marginRight: '-1px',
-    boxSizing: 'border-box',
-    display: 'inline',
-    cursor: 'text',
-    zIndex: '200'
+    position: 'relative !important',
+    borderLeft: '2px solid !important', // colour is set inline by the library
+    borderRight: 'none !important',
+    marginLeft: '-1px !important',
+    marginRight: '-1px !important',
+    boxSizing: 'border-box !important',
+    display: 'inline !important',
+    cursor: 'text !important',
+    zIndex: '200 !important'
   },
   // ── Dot at top of caret ─────────────────────────────────────────────────────
   '.cm-ySelectionCaretDot': {
-    borderRadius: '50%',
-    position: 'absolute',
-    width: '6px',
-    height: '6px',
-    top: '-4px',
-    left: '-4px',
-    backgroundColor: 'inherit',
-    boxShadow: '0 0 0 1.5px rgba(255,255,255,0.8)',
-    transition: 'transform .15s ease',
-    zIndex: '201'
+    borderRadius: '50% !important',
+    position: 'absolute !important',
+    width: '8px !important',
+    height: '8px !important',
+    top: '-4px !important',
+    left: '-4px !important',
+    backgroundColor: 'inherit !important',
+    boxShadow: '0 0 0 1.5px rgba(255,255,255,0.8) !important',
+    transition: 'transform .15s ease !important',
+    zIndex: '201 !important'
   },
   '.cm-ySelectionCaret:hover > .cm-ySelectionCaretDot': {
-    transform: 'scale(0)'
+    transform: 'scale(0) !important'
   },
   // ── Username label ──────────────────────────────────────────────────────────
-  // Override the default hide-until-hover: always show the label
   '.cm-ySelectionInfo': {
-    position: 'absolute',
-    top: '-1.5em',
-    left: '-2px',
-    fontSize: '10px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontStyle: 'normal',
-    fontWeight: '700',
-    lineHeight: '1.4',
-    userSelect: 'none',
-    color: 'white',
-    paddingLeft: '5px',
-    paddingRight: '5px',
-    paddingTop: '1px',
-    paddingBottom: '2px',
-    borderRadius: '3px 3px 3px 0',
-    zIndex: '201',
-    whiteSpace: 'nowrap',
-    backgroundColor: 'inherit',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-    pointerEvents: 'none',
+    position: 'absolute !important',
+    top: '-1.8em !important',
+    left: '-2px !important',
+    fontSize: '11px !important',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important',
+    fontStyle: 'normal !important',
+    fontWeight: '700 !important',
+    lineHeight: '1.4 !important',
+    userSelect: 'none !important',
+    color: 'white !important',
+    padding: '2px 6px !important',
+    borderRadius: '4px 4px 4px 0 !important',
+    zIndex: '201 !important',
+    whiteSpace: 'nowrap !important',
+    backgroundColor: 'inherit !important',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.25) !important',
+    pointerEvents: 'none !important',
     // Always visible (override opacity:0 default)
-    opacity: '1',
-    transition: 'none',
-    transitionDelay: '0s'
+    opacity: '1 !important',
+    transition: 'none !important',
+    transitionDelay: '0s !important'
   },
   '.cm-ySelectionCaret:hover > .cm-ySelectionInfo': {
-    opacity: '1',
-    transitionDelay: '0s'
+    opacity: '1 !important',
+    transitionDelay: '0s !important'
   },
   // ── Selection range highlight ───────────────────────────────────────────────
   '.cm-ySelection': {
-    borderRadius: '2px'
+    borderRadius: '2px !important'
   }
 });
 

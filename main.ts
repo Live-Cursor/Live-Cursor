@@ -752,6 +752,9 @@ class LiveCursorSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.roomName)
         .onChange(async (val) => {
           this.plugin.settings.roomName = val || 'default-live-cursor-room';
+          if (this.plugin.configSyncEngine) {
+            this.plugin.configSyncEngine.workspace = this.plugin.settings.roomName;
+          }
           await this.plugin.saveSettings();
         }));
 
@@ -763,6 +766,9 @@ class LiveCursorSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.signalingUrl)
         .onChange(async (val) => {
           this.plugin.settings.signalingUrl = val;
+          if (this.plugin.configSyncEngine) {
+            this.plugin.configSyncEngine.serverUrl = val || 'ws://localhost:4444';
+          }
           await this.plugin.saveSettings();
         }));
 

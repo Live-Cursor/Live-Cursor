@@ -124,6 +124,15 @@ export class ConfigSyncEngine {
     await this.app.vault.adapter.writeBinary(relPath, data);
   }
 
+  private getConflictPath(path: string, deviceName: string): string {
+    const normalized = path.replace(/\\/g, '/');
+    const idx = normalized.lastIndexOf('.');
+    if (idx !== -1 && idx > normalized.lastIndexOf('/')) {
+      return normalized.substring(0, idx) + ` (Conflict from ${deviceName})` + normalized.substring(idx);
+    }
+    return normalized + ` (Conflict from ${deviceName})`;
+  }
+
   /**
    * Ensures parent directories exist recursively using the raw file system adapter.
    */
@@ -259,8 +268,8 @@ export class ConfigSyncEngine {
                   // Fall back to mtime-based resolution if parsing fails
                   console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
                   const remoteDevice = remote.device || 'Remote';
-                  const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
-                  const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
+                  const localConflictPath = this.getConflictPath(relPath, this.deviceName);
+                  const remoteConflictPath = this.getConflictPath(relPath, remoteDevice);
                   
                   await this.ensureDirExists(localConflictPath, '');
                   await this.writeToVaultUI(localConflictPath, localData);
@@ -278,8 +287,8 @@ export class ConfigSyncEngine {
               } else {
                 // Non-JSON files: Resolve silently via latest modification time (mtime)
                 const remoteDevice = remote.device || 'Remote';
-                const localConflictPath = `Sync Conflicts/${this.deviceName}/${relPath}`;
-                const remoteConflictPath = `Sync Conflicts/${remoteDevice}/${relPath}`;
+                const localConflictPath = this.getConflictPath(relPath, this.deviceName);
+                const remoteConflictPath = this.getConflictPath(relPath, remoteDevice);
                   
                 await this.ensureDirExists(localConflictPath, '');
                 await this.writeToVaultUI(localConflictPath, localData);

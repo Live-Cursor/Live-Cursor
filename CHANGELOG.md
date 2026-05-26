@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.10] - 2026-05-27
+
+### Added
+- Redesigned conflict copy behavior: Conflict files are now created side-by-side inside the original directory instead of in a separate root directory. They are named `[Filename] (Conflict from [Device/User]).[Ext]` to make it easy for users to compare, edit, or move them side-by-side with the original file.
+- Confirmed full symmetric 2-way vault sync. Resolved mobile connection issues that caused aborted sync processes, ensuring complete bidirectionality.
+
 ## [1.3.9] - 2026-05-27
 
 ### Fixed

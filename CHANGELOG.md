@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.11] - 2026-05-27
+
+### Fixed
+- **Stopped Conflict File Explosion**: The sync engine was recursively syncing its own internal data files (`data/rooms/*.bin`) and old conflict copies, creating hundreds of duplicate files. Added comprehensive filters to block plugin internals, conflict copy files, and `Sync Conflicts/` directories from being synced.
+- **Near-Zero Delay Live Sync**: Reduced the disk-to-Yjs reconciliation debounce from 300ms to 50ms and the server-side persistence debounce from 2000ms to 500ms, achieving near-instant live text propagation between devices.
+- **Faster Cursor Visibility**: Reduced the awareness broadcast delay from 150ms to 50ms with a follow-up ping at 500ms, ensuring remote cursors appear instantly when a peer connects.
+
 ## [1.3.10] - 2026-05-27
 
 ### Added

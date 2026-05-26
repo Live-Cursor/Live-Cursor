@@ -164,7 +164,7 @@ export default class LiveCursorPlugin extends Plugin {
                   reconcileYText(currentYText, diskContent);
                 }
               }
-            }, 300, true);
+            }, 50, true);
             this.diskDebouncers.set(file.path, debouncer);
           }
           debouncer(file);
@@ -357,15 +357,16 @@ export default class LiveCursorPlugin extends Plugin {
           });
 
           // Force awareness ping so remote peers immediately see our cursor
-          setTimeout(() => {
+          const pingAwareness = () => {
             if (!(cm as any).destroyed) {
-              // Re-broadcast local state to ensure all peers see our cursor
               const localState = sync.awareness.getLocalState();
               if (localState) {
                 sync.awareness.setLocalState({ ...localState });
               }
             }
-          }, 150);
+          };
+          setTimeout(pingAwareness, 50);
+          setTimeout(pingAwareness, 500); // Follow-up ping for reliability
 
           bound = true;
           console.log(`[LiveCursor] Editor bound for ${file.path}`);

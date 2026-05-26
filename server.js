@@ -304,7 +304,7 @@ wss.on('connection', (ws, req) => {
       timeout = setTimeout(() => {
         saveDoc(roomName, doc);
         saveTimeouts.delete(roomName);
-      }, 2000); // Debounce saves by 2 seconds to optimize disk IO
+      }, 500); // Debounce saves by 500ms for near-instant propagation
       
       saveTimeouts.set(roomName, timeout);
     });

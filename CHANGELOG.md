@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.12] - 2026-05-27
+
+### Added
+- **Conflict File Cleanup and Merge Tool**: Added a new command "Merge and Clean Up Conflict Files" in the Obsidian command palette. This tool automatically scans your vault for any old duplicate `(Conflict from ...)` files left behind by older versions. It cleanly merges their contents directly into the original document using standard Git-style conflict markers (`<<<<<<< Original`, `=======`, `>>>>>>> Conflict`) and automatically deletes the loose conflict files so your vault is clean and CRDT syncing operates smoothly!
+
 ## [1.3.11] - 2026-05-27
 
 ### Fixed

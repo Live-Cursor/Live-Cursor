@@ -1,5 +1,6 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, MarkdownView, Notice, debounce } from 'obsidian';
 import * as Y from 'yjs';
+import * as diff from 'diff';
 import { Awareness } from 'y-protocols/awareness';
 import { WebsocketProvider } from 'y-websocket';
 import { EditorView } from '@codemirror/view';
@@ -107,6 +108,12 @@ export default class LiveCursorPlugin extends Plugin {
       id: 'reconnect-all',
       name: 'Reconnect All Files',
       callback: () => { this.reconnectAll(); }
+    });
+
+    this.addCommand({
+      id: 'merge-conflicts',
+      name: 'Merge and Clean Up Conflict Files',
+      callback: () => { this.cleanupAndMergeConflicts(); }
     });
 
     this.settingsTab = new LiveCursorSettingTab(this.app, this);
@@ -298,6 +305,60 @@ export default class LiveCursorPlugin extends Plugin {
       }
     });
     this.updateStatusBar();
+  }
+
+  async cleanupAndMergeConflicts() {
+    const files = this.app.vault.getFiles();
+    let mergedCount = 0;
+
+    for (const file of files) {
+      const match = file.name.match(/^(.*?) \(Conflict from .*\)\.md$/);
+      if (match) {
+        const baseName = match[1] + '.md';
+        const basePath = file.path.replace(file.name, baseName);
+        const baseFile = this.app.vault.getAbstractFileByPath(basePath);
+
+        if (baseFile instanceof TFile) {
+          const baseContent = await this.app.vault.read(baseFile);
+          const conflictContent = await this.app.vault.read(file);
+
+          if (baseContent === conflictContent) {
+            // Identical, just delete the conflict file
+            await this.app.vault.trash(file, true);
+            mergedCount++;
+            continue;
+          }
+
+          // Generate Git-style diff merge
+          const diffs = diff.diffLines(baseContent, conflictContent);
+          let mergedContent = "";
+          for (let i = 0; i < diffs.length; i++) {
+            const part = diffs[i];
+            if (part.removed && diffs[i+1] && diffs[i+1].added) {
+                // Ensure newlines are clean
+                const val1 = part.value.endsWith('\\n') ? part.value : part.value + '\\n';
+                const val2 = diffs[i+1].value.endsWith('\\n') ? diffs[i+1].value : diffs[i+1].value + '\\n';
+                mergedContent += `<<<<<<< Original\\n${val1}=======\\n${val2}>>>>>>> Conflict\\n`;
+                i++;
+            } else if (part.removed) {
+                const val = part.value.endsWith('\\n') ? part.value : part.value + '\\n';
+                mergedContent += `<<<<<<< Original\\n${val}=======\\n>>>>>>> Conflict (Deleted here)\\n`;
+            } else if (part.added) {
+                const val = part.value.endsWith('\\n') ? part.value : part.value + '\\n';
+                mergedContent += `<<<<<<< Original (Empty)\\n=======\\n${val}>>>>>>> Conflict\\n`;
+            } else {
+                mergedContent += part.value;
+            }
+          }
+
+          await this.app.vault.modify(baseFile, mergedContent);
+          await this.app.vault.trash(file, true);
+          mergedCount++;
+        }
+      }
+    }
+
+    new Notice(`✅ Merged and cleaned up ${mergedCount} conflict files!`);
   }
 
   onunload() {

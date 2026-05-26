@@ -1,10 +1,13 @@
-# Release Notes — Version 1.3.7
+# Release Notes — Version 1.3.8
 
-## What's New in 1.3.7
+## What's New in 1.3.8
 
-### ✨ Cursors & Styling Fixes
-- **Remote Cursors Now Visible**: Fixed an issue where remote user cursors and name tags were completely invisible. We overrode the upstream `y-codemirror.next` default theme which was aggressively hiding the cursor dot and setting the username label's opacity to 0.
-- **Premium Visibility**: Ensured username tags and cursor dots are prominently visible with the user's chosen custom color at all times, identical to professional collaborative editors.
+### 🚀 Ultra-Robust Connection URL Normalization
+- **Flexible Formats Supported**: You can now enter your Server Connection URL in absolutely any format (e.g. `http://100.76.247.27:4444`, `100.76.247.27:4444`, or `ws://100.76.247.27:4444/sync/`).
+- **Zero-Config Normalization**: The plugin automatically detects and normalizes the protocol, trailing slashes, and paths on the fly. It guarantees that WebSockets always connect via `ws://`/`wss://` and the config sync API always runs via `http://`/`https://` cleanly, completely eliminating silent connection crashes from typos.
 
-### 🐛 Sync Engine Fixes
-- **Dynamic Configuration Updates**: Fixed a critical bug where changing the server connection URL or room name required restarting the entire Obsidian application to take effect. The "Full Vault Sync" engine now automatically and dynamically honors URL and Room changes the exact moment you type them in the settings menu.
+### 📋 Detailed Error Notices
+- **Pinpoint Network Issues**: Replaced the generic *"Sync failed. Check server connection."* message with a **detailed, real-time error report notice** (e.g. `Sync failed: Server returned HTTP 500` or `Sync failed: TypeError: Failed to fetch`). If anything goes wrong at the network layer on your phone, you will see exactly why instantly.
+
+### 💻 Diagnostics & Logging
+- **HTTP Endpoint Logs**: Added detailed server-side logging for all sync actions (`/api/manifest`, `/api/upload`, `/api/download`) so developers and users can easily trace incoming connection traffic in the Node daemon.

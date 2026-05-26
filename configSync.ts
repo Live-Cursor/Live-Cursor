@@ -68,15 +68,34 @@ export class ConfigSyncEngine {
   ) {}
 
   private getApiUrl(endpoint: string): string {
-    let httpUrl = this.serverUrl.replace(/^ws/, 'http');
-    httpUrl = httpUrl.replace(/\/sync\/?$/, '');
+    let cleaned = this.serverUrl.trim();
+    if (!cleaned) cleaned = 'ws://localhost:4444';
+
+    // 1. If it has no protocol, prepend 'ws://'
+    if (!/^https?:\/\//i.test(cleaned) && !/^wss?:\/\//i.test(cleaned)) {
+      cleaned = 'ws://' + cleaned;
+    }
+
+    // 2. Map http:// -> ws:// and https:// -> wss://
+    if (/^http:\/\//i.test(cleaned)) {
+      cleaned = cleaned.replace(/^http:\/\//i, 'ws://');
+    } else if (/^https:\/\//i.test(cleaned)) {
+      cleaned = cleaned.replace(/^https:\/\//i, 'wss://');
+    }
+
+    // 3. Remove trailing slashes and '/sync' path suffix
+    cleaned = cleaned.replace(/\/+$/, '');
+    cleaned = cleaned.replace(/\/sync\/?$/i, '');
+    cleaned = cleaned.replace(/\/+$/, '');
+
+    let httpUrl = cleaned.replace(/^ws/i, 'http');
     return `${httpUrl}/api${endpoint}`;
   }
 
   private async getRemoteManifest(): Promise<FileManifest> {
     const url = `${this.getApiUrl('/manifest')}?user=${this.user}&pass=${this.pass}&workspace=${this.workspace}`;
     const res = await requestUrl({ url, method: 'GET' });
-    if (res.status !== 200) throw new Error('Failed to fetch manifest');
+    if (res.status !== 200) throw new Error(`Server returned HTTP ${res.status}: ${res.text || 'No response body'}`);
     return res.json as FileManifest;
   }
 
@@ -283,7 +302,10 @@ export class ConfigSyncEngine {
       if (!silent) new Notice(actionsCount > 0 ? `Sync complete (${actionsCount} updated)` : 'Vault in sync.', 2000);
     } catch (e: any) {
       console.error('[LiveCursor] Sync Error:', e);
-      if (!silent) new Notice(`Sync failed. Check server connection.`, 2000);
+      if (!silent) {
+        const errMsg = e.message || String(e);
+        new Notice(`Sync failed: ${errMsg}`, 5000);
+      }
     } finally {
       ConfigSyncEngine.isSyncing = false;
     }

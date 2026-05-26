@@ -88,6 +88,8 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
 
+  console.log(`[HTTP] ${req.method} ${req.url} - Request received`);
+
   // --- GET /api/manifest ---
   if (pathname === '/api/manifest' && req.method === 'GET') {
     const params = getQueryParams(req.url);
@@ -114,9 +116,11 @@ const server = http.createServer((req, res) => {
     
     try {
       scanDir(wsDir);
+      console.log(`[HTTP] 200 OK /api/manifest - Scanned ${Object.keys(manifest).length} files for workspace: ${params.workspace}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(manifest));
     } catch (e) {
+      console.error(`[HTTP] 500 Error /api/manifest: ${e.message}`);
       res.writeHead(500);
       res.end(JSON.stringify({ error: e.message }));
     }
@@ -130,6 +134,7 @@ const server = http.createServer((req, res) => {
     const relPath = params.path;
     
     if (!relPath || relPath.includes('..')) {
+      console.warn(`[HTTP] 400 Bad Request /api/upload - Invalid path: ${relPath}`);
       res.writeHead(400);
       return res.end('Invalid path');
     }
@@ -152,6 +157,7 @@ const server = http.createServer((req, res) => {
           fs.utimesSync(fullPath, mtime, mtime);
         } catch(e) {}
       }
+      console.log(`[HTTP] 200 OK /api/upload - Path: ${relPath} for workspace: ${params.workspace}`);
       res.writeHead(200);
       res.end('Uploaded');
     });
@@ -165,21 +171,25 @@ const server = http.createServer((req, res) => {
     const relPath = params.path;
     
     if (!relPath || relPath.includes('..')) {
+      console.warn(`[HTTP] 400 Bad Request /api/download - Invalid path: ${relPath}`);
       res.writeHead(400);
       return res.end('Invalid path');
     }
 
     const fullPath = path.join(wsDir, relPath);
     if (!fs.existsSync(fullPath)) {
+      console.warn(`[HTTP] 404 Not Found /api/download - Path: ${relPath}`);
       res.writeHead(404);
       return res.end('File not found');
     }
 
+    console.log(`[HTTP] 200 OK /api/download - Path: ${relPath} for workspace: ${params.workspace}`);
     res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
     fs.createReadStream(fullPath).pipe(res);
     return;
   }
 
+  console.log(`[HTTP] 200 OK / (default root status check page)`);
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Live Cursor Sync Server (WebSocket + DB) is running.');
 });

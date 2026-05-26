@@ -11,6 +11,30 @@ import { ConfigSyncEngine } from './configSync';
 // Electron/Node APIs — only available on desktop
 declare const require: (module: string) => any;
 
+export function normalizeServerUrl(url: string): string {
+  let cleaned = (url || '').trim();
+  if (!cleaned) return 'ws://localhost:4444';
+
+  // 1. If it has no protocol, prepend 'ws://'
+  if (!/^https?:\/\//i.test(cleaned) && !/^wss?:\/\//i.test(cleaned)) {
+    cleaned = 'ws://' + cleaned;
+  }
+
+  // 2. Map http:// -> ws:// and https:// -> wss://
+  if (/^http:\/\//i.test(cleaned)) {
+    cleaned = cleaned.replace(/^http:\/\//i, 'ws://');
+  } else if (/^https:\/\//i.test(cleaned)) {
+    cleaned = cleaned.replace(/^https:\/\//i, 'wss://');
+  }
+
+  // 3. Remove trailing slashes and '/sync' path suffix
+  cleaned = cleaned.replace(/\/+$/, '');
+  cleaned = cleaned.replace(/\/sync\/?$/i, '');
+  cleaned = cleaned.replace(/\/+$/, '');
+
+  return cleaned;
+}
+
 interface LiveCursorSettings {
   nickname: string;
   cursorColor: string;
@@ -45,7 +69,7 @@ export default class LiveCursorPlugin extends Plugin {
     this.statusBarItem = this.addStatusBarItem();
     this.updateStatusBar();
 
-    const serverUrl = this.settings.signalingUrl.trim() || 'ws://localhost:4444';
+    const serverUrl = normalizeServerUrl(this.settings.signalingUrl);
     this.configSyncEngine = new ConfigSyncEngine(
       this.app,
       serverUrl,
@@ -380,7 +404,7 @@ export default class LiveCursorPlugin extends Plugin {
     });
 
     const fileRoomName = `${this.settings.roomName}-${encodeURIComponent(file.path)}`;
-    const serverUrl = this.settings.signalingUrl.trim() || 'ws://localhost:4444';
+    const serverUrl = normalizeServerUrl(this.settings.signalingUrl);
 
     const provider = new WebsocketProvider(serverUrl, fileRoomName, doc, { awareness });
 
@@ -459,7 +483,7 @@ export default class LiveCursorPlugin extends Plugin {
     const DELAYS = [3000, 6000, 12000, 24000, 60000];
 
     if (attempt >= MAX_ATTEMPTS) {
-      const url = this.settings.signalingUrl.trim() || 'ws://localhost:4444';
+      const url = normalizeServerUrl(this.settings.signalingUrl);
       const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
       if (isLocal) {
         new Notice(

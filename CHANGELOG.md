@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.8] - 2026-05-27
+
+### Added
+- Added robust on-the-fly Server Connection URL normalization. Users can now enter connection URLs in any format (e.g. `http://IP`, `ws://IP`, or raw `IP:port` without a protocol, with or without trailing slashes/paths). The plugin will automatically format them correctly for both WebSocket collaboration and HTTP file sync.
+- Added detailed error reporting notices on the client. If file synchronization fails, the exact network/system error message is now displayed in the Notice alert instead of a generic failure message.
+- Added detailed HTTP routing and status logs to `server.js` for easier remote connection diagnostics.
+
 ## [1.3.7] - 2026-05-27
 
 ### Fixed

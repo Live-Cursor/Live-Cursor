@@ -29,7 +29,7 @@ type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
 export default class LiveCursorPlugin extends Plugin {
   settings!: LiveCursorSettings;
-  private activeSyncs: Map<string, { doc: Y.Doc, awareness: Awareness, provider?: WebsocketProvider }> = new Map();
+  public activeSyncs: Map<string, { doc: Y.Doc, awareness: Awareness, provider?: WebsocketProvider }> = new Map();
   private simulatorInterval: any = null;
   private statusBarItem: HTMLElement | null = null;
   private diskDebouncers: Map<string, (file: TFile) => void> = new Map();
@@ -334,7 +334,7 @@ export default class LiveCursorPlugin extends Plugin {
 
           // Force awareness ping so remote peers immediately see our cursor
           setTimeout(() => {
-            if (!cm.isDestroyed) {
+            if (!(cm as any).destroyed) {
               // Re-broadcast local state to ensure all peers see our cursor
               const localState = sync.awareness.getLocalState();
               if (localState) {

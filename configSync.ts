@@ -1,5 +1,5 @@
 import { App, requestUrl, Notice } from 'obsidian';
-import * as Y from 'yjs';
+
 export interface FileManifest {
   [filePath: string]: {
     size: number;
@@ -24,6 +24,35 @@ function deepMerge(target: any, source: any): any {
     }
   }
   return merged;
+}
+
+/**
+ * Filter mechanism to ignore temporary, transient, or large system files that 
+ * cause conflict spam or should not be synced.
+ */
+function shouldIgnore(path: string): boolean {
+  const normalized = path.replace(/\\/g, '/');
+  
+  // Ephemeral/System directories
+  if (
+    normalized.startsWith('.git/') || normalized === '.git' ||
+    normalized.startsWith('.trash/') || normalized === '.trash' ||
+    normalized.startsWith('node_modules/') || normalized === 'node_modules' ||
+    normalized.startsWith('Sync Conflicts/') || normalized === 'Sync Conflicts'
+  ) {
+    return true;
+  }
+
+  // Specific noise files
+  if (
+    normalized === '.obsidian/workspace.json' ||
+    normalized.endsWith('/.DS_Store') || normalized === '.DS_Store' ||
+    normalized.endsWith('/thumbs.db') || normalized === 'thumbs.db'
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export class ConfigSyncEngine {
@@ -68,48 +97,55 @@ export class ConfigSyncEngine {
     return res.arrayBuffer;
   }
 
-
+  /**
+   * Writes binary data directly to the Obsidian vault using low-level adapter APIs 
+   * to bypass standard hidden-file limitations of app.vault.
+   */
   private async writeToVaultUI(relPath: string, data: ArrayBuffer) {
-    const file = this.app.vault.getAbstractFileByPath(relPath);
-    if (file) {
-      await this.app.vault.modifyBinary(file as any, data);
-    } else {
-      await this.app.vault.createBinary(relPath, data);
-    }
+    await this.app.vault.adapter.writeBinary(relPath, data);
   }
 
+  /**
+   * Ensures parent directories exist recursively using the raw file system adapter.
+   */
   private async ensureDirExists(relPath: string, configDir: string) {
-    if (configDir && !this.app.vault.getAbstractFileByPath(configDir)) {
-      await this.app.vault.createFolder(configDir).catch(() => {});
-    }
     const parts = relPath.split('/');
     let cur = configDir;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i] as string;
       cur = cur ? cur + '/' + part : part;
-      if (!this.app.vault.getAbstractFileByPath(cur)) {
-        await this.app.vault.createFolder(cur).catch(() => {});
+      if (shouldIgnore(cur)) continue;
+      const exists = await this.app.vault.adapter.exists(cur);
+      if (!exists) {
+        await this.app.vault.adapter.mkdir(cur).catch(() => {});
       }
     }
   }
 
+  /**
+   * Performs an incremental, database-free whole-vault configuration and file sync.
+   * Compares the local file system manifest with the server manifest, pushing and pulling 
+   * updates as needed, and resolving conflicts automatically.
+   */
   public async syncConfig(silent: boolean = false) {
     if (ConfigSyncEngine.isSyncing) {
       if (!silent) new Notice('Sync already in progress...');
       return;
     }
     ConfigSyncEngine.isSyncing = true;
-    if (!silent) new Notice('Syncing configurations...', 2000);
-    const configDir = this.app.vault.configDir;
+    if (!silent) new Notice('Syncing vault files...', 2000);
 
     try {
       const remoteManifest = await this.getRemoteManifest();
       const localFiles: { path: string, stat: any }[] = [];
 
-      // Recursive local scan
+      // Recursive local scan starting from the vault root ""
       const scanDir = async (dir: string) => {
+        if (shouldIgnore(dir)) return;
+
         const list = await this.app.vault.adapter.list(dir);
         for (const file of list.files) {
+          if (shouldIgnore(file)) continue;
           const stat = await this.app.vault.adapter.stat(file);
           if (stat) localFiles.push({ path: file, stat });
         }
@@ -118,9 +154,7 @@ export class ConfigSyncEngine {
         }
       };
 
-      if (await this.app.vault.adapter.exists(configDir)) {
-        await scanDir(configDir);
-      }
+      await scanDir("");
 
       // Map local files by relative path for unified syncing
       const localMap = new Map<string, { path: string, stat: any }>();
@@ -135,22 +169,17 @@ export class ConfigSyncEngine {
         ...Object.keys(remoteManifest)
       ]);
 
-            new Notice(`Found ${localFiles.length} local files. Comparing with mesh...`, 3000);
       let actionsCount = 0;
-      let downloadCount = 0;
-      let uploadCount = 0;
 
       for (const relPath of allPaths) {
         const local = localMap.get(relPath);
         const remote = remoteManifest[relPath];
-        const fullLocalPath = `${configDir}/${relPath}`;
 
         if (local && !remote) {
           // File exists only locally -> Upload
           const data = await this.app.vault.adapter.readBinary(local.path);
           await this.uploadFile(relPath, data, local.stat.mtime);
           actionsCount++;
-          uploadCount++;
         } else if (!local && remote) {
           // File exists only remotely -> Download
           await this.ensureDirExists(relPath, '');
@@ -180,6 +209,7 @@ export class ConfigSyncEngine {
             }
 
             if (contentsMatch) {
+              // Contents match exactly; just align the timestamps to the newest modified time
               if (local.stat.mtime > remote.mtime) {
                 await this.uploadFile(relPath, localData, local.stat.mtime);
               } else {
@@ -250,14 +280,12 @@ export class ConfigSyncEngine {
         }
       }
 
-      if (!silent) new Notice(actionsCount > 0 ? `Sync complete (${actionsCount} updated)` : 'Configurations in sync.', 2000);
+      if (!silent) new Notice(actionsCount > 0 ? `Sync complete (${actionsCount} updated)` : 'Vault in sync.', 2000);
     } catch (e: any) {
-      // Keep it professional and non-intrusive
-      console.error('[LiveCursor] Config Sync Error:', e);
-      if (!silent) new Notice(`Sync failed. Check connection.`, 2000);
+      console.error('[LiveCursor] Sync Error:', e);
+      if (!silent) new Notice(`Sync failed. Check server connection.`, 2000);
     } finally {
       ConfigSyncEngine.isSyncing = false;
     }
   }
-
 }

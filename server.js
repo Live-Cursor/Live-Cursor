@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const Y = require('yjs');
-const { setupWSConnection } = require('y-websocket/bin/utils');
+const { setupWSConnection, docs: yWSdocs } = require('y-websocket/bin/utils');
 
 const port = process.env.PORT || 4444;
 const dbDir = process.env.DB_DIR || path.join(__dirname, 'data');
@@ -194,9 +194,12 @@ wss.on('connection', (ws, req) => {
 
   console.log(`[+] Client connected to room: ${roomName}`);
 
-  let doc = docs.get(roomName);
-  if (!doc) {
-    doc = new Y.Doc();
+  // Bind connection to standard y-websocket protocol
+  setupWSConnection(ws, req, { docName: roomName });
+
+  // Retrieve the actual shared doc instance that y-websocket creates and manages
+  const doc = yWSdocs.get(roomName);
+  if (doc && !docs.has(roomName)) {
     loadDoc(roomName, doc);
     docs.set(roomName, doc);
     
@@ -213,9 +216,6 @@ wss.on('connection', (ws, req) => {
       saveTimeouts.set(roomName, timeout);
     });
   }
-
-  // Bind connection to standard y-websocket protocol
-  setupWSConnection(ws, req, doc);
 });
 
 server.on('upgrade', (request, socket, head) => {
@@ -234,4 +234,20 @@ server.listen(port, '0.0.0.0', () => {
   console.log(`[*] Database Directory: ${dbDir}`);
   console.log(`[*] Listening on: 0.0.0.0:${port}`);
   console.log('===================================================');
+});
+
+// Flush pending saves on server termination
+function flushAllDocs() {
+  console.log('[Database] Flushing all documents to disk before shutdown...');
+  for (const [roomName, doc] of docs.entries()) {
+    saveDoc(roomName, doc);
+  }
+}
+process.on('SIGTERM', () => {
+  flushAllDocs();
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  flushAllDocs();
+  process.exit(0);
 });

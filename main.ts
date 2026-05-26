@@ -195,7 +195,12 @@ export default class LiveCursorPlugin extends Plugin {
       })
     );
     this.registerEvent(this.app.vault.on('create', () => backgroundSyncDebouncer()));
-    this.registerEvent(this.app.vault.on('delete', () => backgroundSyncDebouncer()));
+    this.registerEvent(this.app.vault.on('delete', (file) => {
+      if (this.configSyncEngine && file instanceof TFile) {
+        this.configSyncEngine.deleteRemoteFile(file.path);
+      }
+      backgroundSyncDebouncer();
+    }));
     this.registerEvent(this.app.vault.on('rename', () => backgroundSyncDebouncer()));
 
     // Automatically check for remote vault changes every 30 seconds

@@ -128,6 +128,16 @@ export class ConfigSyncEngine {
     return res.arrayBuffer;
   }
 
+  public async deleteRemoteFile(relativePath: string) {
+    if (shouldIgnore(relativePath)) return;
+    try {
+      const url = `${this.getApiUrl('/delete')}?user=${this.user}&pass=${this.pass}&workspace=${this.workspace}&path=${encodeURIComponent(relativePath)}`;
+      await requestUrl({ url, method: 'DELETE' });
+    } catch (e) {
+      console.warn(`[LiveCursor] Failed to delete remote file ${relativePath}:`, e);
+    }
+  }
+
   /**
    * Writes binary data directly to the Obsidian vault using low-level adapter APIs 
    * to bypass standard hidden-file limitations of app.vault.

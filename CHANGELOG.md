@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.14] - 2026-05-27
+
+### Fixed
+- **Immortal Files Bug**: Fixed a major edge case where files deleted from your local vault were never deleted from the server, causing the server to "undelete" and restore them on the next sync cycle (which is why old conflict files kept returning after being cleaned up). Added a secure `DELETE` endpoint to the sync server and hooked it directly into Obsidian's deletion events. Now, when you delete a file (or when the cleanup tool removes a conflict file), it is instantly and permanently destroyed across all devices.
+
 ## [1.3.13] - 2026-05-27
 
 ### Added

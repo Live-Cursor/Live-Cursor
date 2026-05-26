@@ -188,6 +188,40 @@ const server = http.createServer((req, res) => {
     fs.createReadStream(fullPath).pipe(res);
     return;
   }
+  // --- DELETE /api/delete ---
+  if (pathname === '/api/delete' && req.method === 'DELETE') {
+    const params = getQueryParams(req.url);
+    const wsDir = getConfigWorkspacePath(params.workspace);
+    const relPath = params.path;
+    
+    if (!relPath || relPath.includes('..')) {
+      console.warn(`[HTTP] 400 Bad Request /api/delete - Invalid path: ${relPath}`);
+      res.writeHead(400);
+      return res.end('Invalid path');
+    }
+
+    const fullPath = path.join(wsDir, relPath);
+    console.log(`[HTTP] DELETE /api/delete?user=${params.user}&workspace=${params.workspace}&path=${encodeURIComponent(relPath)} - Request received`);
+
+    if (fs.existsSync(fullPath)) {
+      try {
+        fs.unlinkSync(fullPath);
+        console.log(`[HTTP] 200 OK /api/delete - Path: ${relPath} for workspace: ${params.workspace}`);
+        res.writeHead(200);
+        res.end('Deleted');
+      } catch (e) {
+        console.error(`[HTTP] 500 Error /api/delete: ${e.message}`);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    } else {
+      console.log(`[HTTP] 200 OK /api/delete (Already missing) - Path: ${relPath}`);
+      res.writeHead(200);
+      res.end('Already deleted');
+    }
+    return;
+  }
+
 
   // --- GET /api/room-state ---
   if (pathname === '/api/room-state' && req.method === 'GET') {

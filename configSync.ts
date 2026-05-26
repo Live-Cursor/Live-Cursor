@@ -1,4 +1,6 @@
 import { App, requestUrl, Notice } from 'obsidian';
+import * as Y from 'yjs';
+import { reconcileYText } from './reconcile';
 
 export interface FileManifest {
   [filePath: string]: {
@@ -245,7 +247,67 @@ export class ConfigSyncEngine {
               }
             } else {
               // Conflict: Contents are different and timestamps differ.
-              if (relPath.endsWith('.json')) {
+              if (relPath.endsWith('.md')) {
+                // ELEGANT AUTOMATIC CRDT NOTE MERGE!
+                try {
+                  console.log(`[LiveCursor] Automatically merging CRDT conflict for note: ${relPath}`);
+                  
+                  // 1. Fetch the server's Yjs room state binary update
+                  const urlGet = `${this.getApiUrl('/room-state')}?user=${this.user}&pass=${this.pass}&workspace=${this.workspace}&path=${encodeURIComponent(relPath)}`;
+                  const resGet = await requestUrl({ url: urlGet, method: 'GET' });
+                  
+                  const doc = new Y.Doc();
+                  if (resGet.status === 200 && resGet.arrayBuffer.byteLength > 0) {
+                    Y.applyUpdate(doc, new Uint8Array(resGet.arrayBuffer));
+                  }
+
+                  // 2. Read the local disk file content
+                  const decoder = new TextDecoder('utf-8');
+                  const localText = decoder.decode(new Uint8Array(localData));
+
+                  // 3. Reconcile the Yjs document with our local offline edits
+                  const ytext = doc.getText('content');
+                  
+                  // If the Yjs doc was empty, initialize it with the remote content first
+                  if (ytext.toString() === '') {
+                    const remoteText = decoder.decode(new Uint8Array(remoteData));
+                    ytext.insert(0, remoteText);
+                  }
+                  
+                  // Reconcile with local text to merge offline edits cleanly
+                  reconcileYText(ytext, localText);
+
+                  // 4. Encode the merged state as a Yjs update
+                  const mergedUpdate = Y.encodeStateAsUpdate(doc);
+
+                  // 5. Send the merged update back to the server
+                  const urlPost = `${this.getApiUrl('/room-state')}?user=${this.user}&pass=${this.pass}&workspace=${this.workspace}&path=${encodeURIComponent(relPath)}`;
+                  const resPost = await requestUrl({
+                    url: urlPost,
+                    method: 'POST',
+                    body: mergedUpdate.buffer,
+                  });
+
+                  if (resPost.status !== 200) throw new Error(`CRDT Merge POST failed: ${resPost.text}`);
+
+                  // 6. Write the merged text back to our local disk file
+                  const mergedText = ytext.toString();
+                  const encoder = new TextEncoder();
+                  await this.writeToVaultUI(relPath, encoder.encode(mergedText).buffer);
+
+                  actionsCount++;
+                  console.log(`[LiveCursor] CRDT merge successful for note: ${relPath}`);
+                } catch (crdtErr) {
+                  console.error(`[LiveCursor] CRDT merge failed for ${relPath}, falling back to silent mtime resolution:`, crdtErr);
+                  // Fallback: Silent latest modified wins (Zero Conflicts Protocol!)
+                  if (local.stat.mtime > remote.mtime) {
+                    await this.uploadFile(relPath, localData, local.stat.mtime);
+                  } else {
+                    await this.writeToVaultUI(relPath, remoteData);
+                  }
+                  actionsCount++;
+                }
+              } else if (relPath.endsWith('.json')) {
                 // Elegant automatic JSON merge
                 try {
                   const decoder = new TextDecoder('utf-8');
@@ -265,18 +327,8 @@ export class ConfigSyncEngine {
                   actionsCount++;
                   console.log(`[LiveCursor] Automatically merged JSON conflict for config file: ${relPath}`);
                 } catch (jsonErr) {
-                  // Fall back to mtime-based resolution if parsing fails
-                  console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to mtime:`, jsonErr);
-                  const remoteDevice = remote.device || 'Remote';
-                  const localConflictPath = this.getConflictPath(relPath, this.deviceName);
-                  const remoteConflictPath = this.getConflictPath(relPath, remoteDevice);
-                  
-                  await this.ensureDirExists(localConflictPath, '');
-                  await this.writeToVaultUI(localConflictPath, localData);
-                  
-                  await this.ensureDirExists(remoteConflictPath, '');
-                  await this.writeToVaultUI(remoteConflictPath, remoteData);
-
+                  console.warn(`[LiveCursor] JSON merge failed for ${relPath}, falling back to silent mtime resolution:`, jsonErr);
+                  // Fallback: Silent latest modified wins (Zero Conflicts Protocol!)
                   if (local.stat.mtime > remote.mtime) {
                     await this.uploadFile(relPath, localData, local.stat.mtime);
                   } else {
@@ -285,17 +337,8 @@ export class ConfigSyncEngine {
                   actionsCount++;
                 }
               } else {
-                // Non-JSON files: Resolve silently via latest modification time (mtime)
-                const remoteDevice = remote.device || 'Remote';
-                const localConflictPath = this.getConflictPath(relPath, this.deviceName);
-                const remoteConflictPath = this.getConflictPath(relPath, remoteDevice);
-                  
-                await this.ensureDirExists(localConflictPath, '');
-                await this.writeToVaultUI(localConflictPath, localData);
-                  
-                await this.ensureDirExists(remoteConflictPath, '');
-                await this.writeToVaultUI(remoteConflictPath, remoteData);
-
+                // Non-JSON/Non-Markdown binary files: Resolve silently via latest modification time (mtime)
+                console.log(`[LiveCursor] Silently resolving binary conflict for ${relPath} via latest mtime`);
                 if (local.stat.mtime > remote.mtime) {
                   await this.uploadFile(relPath, localData, local.stat.mtime);
                 } else {

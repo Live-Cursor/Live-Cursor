@@ -189,6 +189,89 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // --- GET /api/room-state ---
+  if (pathname === '/api/room-state' && req.method === 'GET') {
+    const params = getQueryParams(req.url);
+    const relPath = params.path;
+    if (!relPath) {
+      res.writeHead(400);
+      return res.end('Missing path');
+    }
+    const roomName = `${params.workspace}-${encodeURIComponent(relPath)}`;
+    const p = getRoomPath(roomName);
+    
+    console.log(`[HTTP] GET /api/room-state - Path: ${relPath} for workspace: ${params.workspace}`);
+    
+    if (fs.existsSync(p)) {
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      fs.createReadStream(p).pipe(res);
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      res.end(Buffer.from(new Uint8Array([0, 0])));
+    }
+    return;
+  }
+
+  // --- POST /api/room-state ---
+  if (pathname === '/api/room-state' && req.method === 'POST') {
+    const params = getQueryParams(req.url);
+    const wsDir = getConfigWorkspacePath(params.workspace);
+    const relPath = params.path;
+    
+    if (!relPath || relPath.includes('..')) {
+      console.warn(`[HTTP] 400 Bad Request /api/room-state - Invalid path: ${relPath}`);
+      res.writeHead(400);
+      return res.end('Invalid path');
+    }
+
+    const roomName = `${params.workspace}-${encodeURIComponent(relPath)}`;
+    console.log(`[HTTP] POST /api/room-state - Path: ${relPath} for workspace: ${params.workspace}`);
+
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      const update = Buffer.concat(chunks);
+      
+      let doc = docs.get(roomName);
+      let isNew = false;
+      if (!doc) {
+        doc = new Y.Doc();
+        loadDoc(roomName, doc);
+        isNew = true;
+      }
+
+      try {
+        Y.applyUpdate(doc, new Uint8Array(update));
+        saveDoc(roomName, doc);
+
+        // Retrieve text
+        const mergedText = doc.getText('content').toString();
+
+        if (isNew) {
+          doc.destroy();
+        }
+
+        // Also write plain text file to configuration folder so they are synced side-by-side
+        const fullPath = path.join(wsDir, relPath);
+        const targetDir = path.dirname(fullPath);
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        fs.writeFileSync(fullPath, mergedText, 'utf-8');
+
+        console.log(`[HTTP] 200 OK /api/room-state - Successfully merged CRDT for path: ${relPath}`);
+        res.writeHead(200);
+        res.end('Merged');
+      } catch (err) {
+        console.error(`[HTTP] 500 Error /api/room-state:`, err);
+        if (isNew && doc) doc.destroy();
+        res.writeHead(500);
+        res.end(`Merge failed: ${err.message}`);
+      }
+    });
+    return;
+  }
+
   console.log(`[HTTP] 200 OK / (default root status check page)`);
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Live Cursor Sync Server (WebSocket + DB) is running.');

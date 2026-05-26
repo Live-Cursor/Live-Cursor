@@ -128,12 +128,12 @@ export class ConfigSyncEngine {
    * Ensures parent directories exist recursively using the raw file system adapter.
    */
   private async ensureDirExists(relPath: string, configDir: string) {
-    const parts = relPath.split('/');
+    const normalized = relPath.replace(/\\/g, '/');
+    const parts = normalized.split('/');
     let cur = configDir;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i] as string;
       cur = cur ? cur + '/' + part : part;
-      if (shouldIgnore(cur)) continue;
       const exists = await this.app.vault.adapter.exists(cur);
       if (!exists) {
         await this.app.vault.adapter.mkdir(cur).catch(() => {});

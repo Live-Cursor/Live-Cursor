@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.9] - 2026-05-27
+
+### Fixed
+- Fixed a critical "parent folder not found" directory creation bug during client file sync. Bypassed the ignored path check when creating parent directories to ensure directories like `Sync Conflicts` and other nested subfolders are successfully created before writing files.
+- Normalized Windows backslashes `\` to standard `/` during directory path creation checks to guarantee seamless cross-platform compatibility on Android and iOS.
+
 ## [1.3.8] - 2026-05-27
 
 ### Added

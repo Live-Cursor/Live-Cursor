@@ -23,7 +23,9 @@ const collabTheme = EditorView.theme({
     marginLeft: '-1px !important',
     marginRight: '-1px !important',
     boxSizing: 'border-box !important',
-    display: 'inline !important',
+    display: 'inline-block !important',
+    height: '1.25em !important',
+    verticalAlign: 'text-bottom !important',
     cursor: 'text !important',
     zIndex: '200 !important'
   },

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.16] - 2026-05-27
+
+### Added
+- **Auto-Starting Background Server**: Added automatic background server startup on desktop launch (if using a local signaling URL). The sync server now boots instantly in the background silently.
+- **Zero-Flicker Premium Cursors**: Fixed a CodeMirror 6 focus bug in Obsidian where remote cursors would flicker or disappear during focus transitions. Added a premium `inline-block` layout caret style for flawless visibility across themes.
+- **Server-Side CRDT Upload/Delete Sync**: Integrated the Yjs room state databases directly with file uploads and deletions on the server. Overwriting or deleting notes now keeps the Yjs database fully synced, preventing phantom conflict files.
+
 ## [1.3.15] - 2026-05-27
 
 ### Fixed

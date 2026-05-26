@@ -80,6 +80,15 @@ export default class LiveCursorPlugin extends Plugin {
       this.settings.nickname
     );
 
+    // Start local server automatically on desktop if configured for localhost
+    if (this.isDesktop()) {
+      const isLocal = serverUrl.includes('localhost') || serverUrl.includes('127.0.0.1');
+      if (isLocal) {
+        console.log('[LiveCursor] Local URL configured. Auto-starting local sync server in the background.');
+        this.startLocalServer(true);
+      }
+    }
+
     // Commands
     this.addRibbonIcon('users', 'Simulate Collaborator Activity', () => {
       this.toggleSimulator();
@@ -230,13 +239,13 @@ export default class LiveCursorPlugin extends Plugin {
     return this.serverProcess !== null;
   }
 
-  async startLocalServer(): Promise<void> {
+  async startLocalServer(silent: boolean = false): Promise<void> {
     if (!this.isDesktop()) {
-      new Notice('Local server can only be started on desktop.');
+      if (!silent) new Notice('Local server can only be started on desktop.');
       return;
     }
     if (this.serverProcess) {
-      new Notice('Local server is already running on port 4444.');
+      if (!silent) new Notice('Local server is already running on port 4444.');
       return;
     }
 
@@ -281,7 +290,7 @@ export default class LiveCursorPlugin extends Plugin {
 
       // Give it a moment to start, then reconnect
       setTimeout(() => {
-        new Notice('🟢 Local server started on port 4444. Connecting...');
+        if (!silent) new Notice('🟢 Local server started on port 4444. Connecting...');
         this.settingsTab?.display();
         this.reconnectAll();
       }, 1500);
@@ -410,6 +419,19 @@ export default class LiveCursorPlugin extends Plugin {
         if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) {
           const cm = (leaf.view.editor as any).cm as EditorView;
           if (!cm) return;
+
+          // Override hasFocus to return true whenever the active Markdown view's path matches the file path.
+          // This prevents y-codemirror from clearing cursor awareness state during focus transitions.
+          try {
+            Object.defineProperty(cm, 'hasFocus', {
+              get: () => {
+                return this.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path === file.path;
+              },
+              configurable: true
+            });
+          } catch (e) {
+            console.warn('[LiveCursor] Failed to override hasFocus getter:', e);
+          }
 
           // Create or reuse the compartment stored on the CM instance
           let compartment = (cm as any)._liveCursorCompartment as Compartment | undefined;

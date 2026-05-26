@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const Y = require('yjs');
-const { setupWSConnection, docs: yWSdocs } = require('y-websocket/bin/utils');
+const { setupWSConnection, docs: yWSdocs, getYDoc } = require('y-websocket/bin/utils');
 
 const port = process.env.PORT || 4444;
 const dbDir = process.env.DB_DIR || path.join(__dirname, 'data');
@@ -146,20 +146,59 @@ const server = http.createServer((req, res) => {
       fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    const fileStream = fs.createWriteStream(fullPath);
-    req.pipe(fileStream);
-
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => {
-      // Set the file's mtime to what the client sent, if provided
-      if (params.mtime) {
-        const mtime = parseInt(params.mtime) / 1000;
-        try {
-          fs.utimesSync(fullPath, mtime, mtime);
-        } catch(e) {}
+      const buffer = Buffer.concat(chunks);
+      try {
+        fs.writeFileSync(fullPath, buffer);
+
+        // Set the file's mtime to what the client sent, if provided
+        if (params.mtime) {
+          const mtime = parseInt(params.mtime) / 1000;
+          try {
+            fs.utimesSync(fullPath, mtime, mtime);
+          } catch(e) {}
+        }
+
+        // If it's a markdown file, sync the Yjs room state binary to match this new text!
+        if (relPath.endsWith('.md')) {
+          const text = buffer.toString('utf-8');
+          const roomName = `${params.workspace}-${encodeURIComponent(relPath)}`;
+          
+          let doc = docs.get(roomName);
+          let isNew = false;
+          if (!doc) {
+            doc = new Y.Doc();
+            loadDoc(roomName, doc);
+            isNew = true;
+          }
+
+          const ytext = doc.getText('content');
+          
+          // Overwrite/reconcile Yjs content with the uploaded text
+          if (ytext.toString() !== text) {
+            ytext.doc.transact(() => {
+              ytext.delete(0, ytext.length);
+              ytext.insert(0, text);
+            });
+            saveDoc(roomName, doc);
+            console.log(`[Database] Updated Yjs state for ${roomName} from uploaded file`);
+          }
+
+          if (isNew) {
+            doc.destroy();
+          }
+        }
+
+        console.log(`[HTTP] 200 OK /api/upload - Path: ${relPath} for workspace: ${params.workspace}`);
+        res.writeHead(200);
+        res.end('Uploaded');
+      } catch (err) {
+        console.error(`[HTTP] 500 Error /api/upload:`, err);
+        res.writeHead(500);
+        res.end(`Upload failed: ${err.message}`);
       }
-      console.log(`[HTTP] 200 OK /api/upload - Path: ${relPath} for workspace: ${params.workspace}`);
-      res.writeHead(200);
-      res.end('Uploaded');
     });
     return;
   }
@@ -202,6 +241,18 @@ const server = http.createServer((req, res) => {
 
     const fullPath = path.join(wsDir, relPath);
     console.log(`[HTTP] DELETE /api/delete?user=${params.user}&workspace=${params.workspace}&path=${encodeURIComponent(relPath)} - Request received`);
+
+    const roomName = `${params.workspace}-${encodeURIComponent(relPath)}`;
+    const roomPath = getRoomPath(roomName);
+
+    if (fs.existsSync(roomPath)) {
+      try {
+        fs.unlinkSync(roomPath);
+        console.log(`[Database] Deleted room state for: ${roomName}`);
+      } catch (e) {
+        console.error(`[Database] Failed to delete room state:`, e);
+      }
+    }
 
     if (fs.existsSync(fullPath)) {
       try {
@@ -321,12 +372,12 @@ wss.on('connection', (ws, req) => {
 
   console.log(`[+] Client connected to room: ${roomName}`);
 
-  // Bind connection to standard y-websocket protocol
-  setupWSConnection(ws, req, { docName: roomName });
+  // Pre-load or retrieve the shared doc instance before connection setup so Yjs
+  // has correct disk state BEFORE synchronization begins!
+  let isNew = !yWSdocs.has(roomName);
+  const doc = getYDoc(roomName);
 
-  // Retrieve the actual shared doc instance that y-websocket creates and manages
-  const doc = yWSdocs.get(roomName);
-  if (doc && !docs.has(roomName)) {
+  if (isNew) {
     loadDoc(roomName, doc);
     docs.set(roomName, doc);
     
@@ -343,6 +394,9 @@ wss.on('connection', (ws, req) => {
       saveTimeouts.set(roomName, timeout);
     });
   }
+
+  // Bind connection to standard y-websocket protocol — this uses our pre-loaded doc
+  setupWSConnection(ws, req, { docName: roomName });
 });
 
 server.on('upgrade', (request, socket, head) => {

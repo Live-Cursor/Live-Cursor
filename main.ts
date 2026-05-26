@@ -2,7 +2,6 @@ import { App, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, MarkdownV
 import * as Y from 'yjs';
 import { Awareness } from 'y-protocols/awareness';
 import { WebsocketProvider } from 'y-websocket';
-import { yCollab } from 'y-codemirror.next';
 import { EditorView } from '@codemirror/view';
 import { Compartment, StateEffect } from '@codemirror/state';
 import { collaborationExtension } from './collabExtension';
@@ -324,22 +323,25 @@ export default class LiveCursorPlugin extends Plugin {
 
           const ytext = sync.doc.getText('content');
 
-          // Pass awareness to yCollab so it handles undo stack awareness and
-          // also pass it to our own extension so cursors render.
+          // collaborationExtension now wraps yCollab internally.
+          // It passes both ytext and awareness so that yCollab can use
+          // Y.RelativePosition for cursor tracking (the correct approach).
           cm.dispatch({
-            effects: compartment.reconfigure([
-              yCollab(ytext, sync.awareness),
-              collaborationExtension(sync.awareness)
-            ])
+            effects: compartment.reconfigure(
+              collaborationExtension(ytext, sync.awareness)
+            )
           });
 
-          // Force an immediate awareness dispatch so remote cursors
-          // appear without needing any mouse movement
+          // Force awareness ping so remote peers immediately see our cursor
           setTimeout(() => {
             if (!cm.isDestroyed) {
-              sync.awareness.setLocalState(sync.awareness.getLocalState());
+              // Re-broadcast local state to ensure all peers see our cursor
+              const localState = sync.awareness.getLocalState();
+              if (localState) {
+                sync.awareness.setLocalState({ ...localState });
+              }
             }
-          }, 100);
+          }, 150);
 
           bound = true;
           console.log(`[LiveCursor] Editor bound for ${file.path}`);
@@ -519,7 +521,6 @@ export default class LiveCursorPlugin extends Plugin {
 
     const mockClientId = 133742;
     let typingDirection = 1;
-    let mockAnchor = 0;
     let mockHead = 0;
 
     this.simulatorInterval = setInterval(() => {
@@ -528,27 +529,31 @@ export default class LiveCursorPlugin extends Plugin {
       const currentSync = this.activeSyncs.get(currentView.file.path);
       if (!currentSync) return;
 
-      const docLength = currentSync.doc.getText('content').length;
+      const ytext = currentSync.doc.getText('content');
+      const docLength = ytext.length;
       if (docLength === 0) return;
 
       if (Math.random() < 0.2) {
-        mockAnchor = Math.floor(Math.random() * docLength);
-        mockHead = mockAnchor;
+        mockHead = Math.floor(Math.random() * docLength);
       } else {
         mockHead += typingDirection * Math.floor(Math.random() * 3 + 1);
-        if (mockHead >= docLength) { mockHead = docLength; typingDirection = -1; }
+        if (mockHead >= docLength) { mockHead = docLength - 1; typingDirection = -1; }
         else if (mockHead <= 0) { mockHead = 0; typingDirection = 1; }
-
-        if (Math.random() < 0.35) {
-          mockAnchor = Math.max(0, mockHead - Math.floor(Math.random() * 20 + 5));
-        } else {
-          mockAnchor = mockHead;
-        }
       }
+
+      const mockAnchorAbs = Math.random() < 0.35
+        ? Math.max(0, mockHead - Math.floor(Math.random() * 20 + 5))
+        : mockHead;
+
+      // Use Y.RelativePosition so the cursor is compatible with yCollab's
+      // yRemoteSelections plugin, which reads cursor.anchor and cursor.head
+      // as relative positions.
+      const anchor = Y.createRelativePositionFromTypeIndex(ytext, mockAnchorAbs);
+      const head   = Y.createRelativePositionFromTypeIndex(ytext, mockHead);
 
       currentSync.awareness.states.set(mockClientId, {
         user: { name: 'Jane Doe (Simulated)', color: '#ec4899', colorLight: '#ec489922' },
-        cursor: { anchor: mockAnchor, head: mockHead }
+        cursor: { anchor, head }
       });
       currentSync.awareness.emit('change', [{ added: [], updated: [mockClientId], removed: [] }]);
     }, 1000);

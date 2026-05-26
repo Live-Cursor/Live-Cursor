@@ -180,8 +180,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  response.writeHead(200, { 'Content-Type': 'text/plain' });
-  response.end('Live Cursor Sync Server (WebSocket + DB) is running.');
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Live Cursor Sync Server (WebSocket + DB) is running.');
 });
 
 // Create WebSocket server

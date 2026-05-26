@@ -55,9 +55,9 @@ function shouldIgnore(path: string): boolean {
     return true;
   }
 
-  // Specific noise files
+  // Specific noise files and device-specific workspace configurations
   if (
-    normalized === '.obsidian/workspace.json' ||
+    normalized.includes('.obsidian/workspace') || // covers workspace.json, workspace-mobile.json, workspaces.json, etc.
     normalized.endsWith('/.DS_Store') || normalized === '.DS_Store' ||
     normalized.endsWith('/thumbs.db') || normalized === 'thumbs.db'
   ) {

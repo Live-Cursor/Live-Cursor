@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.15] - 2026-05-27
+
+### Fixed
+- **Workspace Syncing Excluded**: Prevented syncing of device-specific configuration files such as `workspace.json`, `workspace-mobile.json`, and `workspaces.json`. This ensures device layouts and recent files lists don't conflict or get overwritten across devices.
+
 ## [1.3.14] - 2026-05-27
 
 ### Fixed

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.13] - 2026-05-27
+
+### Added
+- **Full Background Vault Sync**: The plugin now continuously runs in the background just like Obsidian-LiveSync! Any time you create, rename, modify, or delete a file, it will automatically sync to the server in the background (debounced to 5 seconds). It also automatically polls the server every 30 seconds for remote changes made by other devices, ensuring your entire vault stays in perfect harmony without needing to open files or click buttons!
+- **Silent CRDT Conflict Merging**: Updated the "Merge and Clean Up Conflict Files" command. Instead of inserting messy `<<<<<<< Original` markers, it now performs a true CRDT-style silent additive merge. It keeps all new text from both the original and conflict files and seamlessly unifies them, leaving your documents clean while ensuring zero data loss!
+
 ## [1.3.12] - 2026-05-27
 
 ### Added

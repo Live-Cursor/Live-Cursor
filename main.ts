@@ -179,6 +179,28 @@ export default class LiveCursorPlugin extends Plugin {
       })
     );
 
+    // Background Vault Syncing (like Obsidian LiveSync)
+    const backgroundSyncDebouncer = debounce(() => {
+      if (this.configSyncEngine) {
+        this.configSyncEngine.syncConfig(true);
+      }
+    }, 5000, true);
+
+    this.registerEvent(
+      this.app.vault.on('modify', (file) => {
+        // If it's not currently open, sync it in the background
+        if (file instanceof TFile && !this.activeSyncs.has(file.path)) {
+          backgroundSyncDebouncer();
+        }
+      })
+    );
+    this.registerEvent(this.app.vault.on('create', () => backgroundSyncDebouncer()));
+    this.registerEvent(this.app.vault.on('delete', () => backgroundSyncDebouncer()));
+    this.registerEvent(this.app.vault.on('rename', () => backgroundSyncDebouncer()));
+
+    // Automatically check for remote vault changes every 30 seconds
+    this.registerInterval(window.setInterval(() => backgroundSyncDebouncer(), 30000));
+
     // Sync the currently active file
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeView && activeView.file) {
@@ -329,26 +351,12 @@ export default class LiveCursorPlugin extends Plugin {
             continue;
           }
 
-          // Generate Git-style diff merge
-          const diffs = diff.diffLines(baseContent, conflictContent);
+          // Automatic CRDT-style additive merge (no git markers)
+          const diffs = diff.diffWordsWithSpace(baseContent, conflictContent);
           let mergedContent = "";
-          for (let i = 0; i < diffs.length; i++) {
-            const part = diffs[i];
-            if (part.removed && diffs[i+1] && diffs[i+1].added) {
-                // Ensure newlines are clean
-                const val1 = part.value.endsWith('\\n') ? part.value : part.value + '\\n';
-                const val2 = diffs[i+1].value.endsWith('\\n') ? diffs[i+1].value : diffs[i+1].value + '\\n';
-                mergedContent += `<<<<<<< Original\\n${val1}=======\\n${val2}>>>>>>> Conflict\\n`;
-                i++;
-            } else if (part.removed) {
-                const val = part.value.endsWith('\\n') ? part.value : part.value + '\\n';
-                mergedContent += `<<<<<<< Original\\n${val}=======\\n>>>>>>> Conflict (Deleted here)\\n`;
-            } else if (part.added) {
-                const val = part.value.endsWith('\\n') ? part.value : part.value + '\\n';
-                mergedContent += `<<<<<<< Original (Empty)\\n=======\\n${val}>>>>>>> Conflict\\n`;
-            } else {
-                mergedContent += part.value;
-            }
+          for (const part of diffs) {
+            // Keep all text from both versions (CRDT union behavior)
+            mergedContent += part.value;
           }
 
           await this.app.vault.modify(baseFile, mergedContent);

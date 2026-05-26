@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, MarkdownView, Notice, debounce } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, MarkdownView, Notice, debounce, requestUrl } from 'obsidian';
 import * as Y from 'yjs';
 import * as diff from 'diff';
 import { Awareness } from 'y-protocols/awareness';
@@ -341,6 +341,50 @@ export default class LiveCursorPlugin extends Plugin {
       }
     });
     this.updateStatusBar();
+  }
+
+  async reconstructDatabase(): Promise<void> {
+    if (!this.configSyncEngine) {
+      new Notice('Sync engine not initialized.');
+      return;
+    }
+
+    try {
+      new Notice('🔄 Resetting and reconstructing server database rooms...', 3000);
+
+      // 1. Disconnect and clear all active docs locally
+      for (const [path, sync] of this.activeSyncs.entries()) {
+        const retryTimeout = this.retryTimeouts.get(path);
+        if (retryTimeout) clearTimeout(retryTimeout);
+        this.retryTimeouts.delete(path);
+        if (sync.provider) sync.provider.disconnect();
+        sync.doc.destroy();
+      }
+      this.activeSyncs.clear();
+      this.diskDebouncers.clear();
+
+      // 2. Call reconstruct API on server
+      const url = `${this.configSyncEngine.serverUrl.trim()}/api/reconstruct-db?user=${this.settings.nickname}&workspace=${this.settings.roomName}`;
+      let httpUrl = url.replace(/^ws/i, 'http');
+      const res = await requestUrl({ url: httpUrl, method: 'POST' });
+
+      if (res.status !== 200) {
+        throw new Error(`Server returned HTTP ${res.status}: ${res.text || 'No response body'}`);
+      }
+
+      new Notice('🧹 Server memory cleared. Re-uploading all files as source of truth...', 3500);
+
+      // 3. Force full vault config and note re-upload!
+      await this.configSyncEngine.syncConfig(false);
+
+      // 4. Reconnect active workspace leaves
+      this.reconnectAll();
+
+      new Notice('✅ Database successfully reconstructed! All devices connected.', 4000);
+    } catch (err: any) {
+      console.error('[LiveCursor] Database reconstruction failed:', err);
+      new Notice(`❌ Database reconstruction failed: ${err.message || err}`, 5000);
+    }
   }
 
   async cleanupAndMergeConflicts() {
@@ -753,6 +797,36 @@ class LiveCursorSettingTab extends PluginSettingTab {
     subtitle.style.fontSize = 'var(--font-ui-small)';
     subtitle.style.color = 'var(--text-muted)';
 
+    // ── Quick-Start Tutorial Card ──
+    const tutorialCard = containerEl.createEl('div');
+    tutorialCard.style.cssText = 'background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%); border: 1px solid rgba(99, 102, 241, 0.22); border-radius: 12px; padding: 18px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);';
+    tutorialCard.innerHTML = `
+      <h3 style="margin: 0 0 8px 0; color: var(--text-accent); font-size: 1.1em; display: flex; align-items: center; gap: 8px;">🎓 Quick-Start Collaboration Guide</h3>
+      <p style="margin: 0 0 14px 0; font-size: var(--font-ui-small); color: var(--text-muted); line-height: 1.45;">Follow these simple steps to start collaborating and syncing in real time:</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 12px; font-size: var(--font-ui-small); line-height: 1.45;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+          <div style="background: var(--interactive-accent); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: bold; font-size: 11px;">1</div>
+          <div><strong>Start Local Host (On PC)</strong>: Toggle the <strong>Local Server</strong> below to <span style="color: var(--text-success); font-weight: 600;">🟢 Running</span>. (Your PC acts as the secure host).</div>
+        </div>
+        
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+          <div style="background: var(--interactive-accent); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: bold; font-size: 11px;">2</div>
+          <div><strong>Connect from Mobile / Laptop</strong>: Ensure all devices are on the same Wi-Fi. Enter your PC's IP address (e.g. <code>ws://YOUR_PC_IP:4444</code>) in the <strong>Server Connection URL</strong> on the other devices.</div>
+        </div>
+        
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+          <div style="background: var(--interactive-accent); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: bold; font-size: 11px;">3</div>
+          <div><strong>Set Room Name</strong>: All devices collaborating together must use the exact same <strong>Room Name</strong> (e.g. <code>my-shared-room</code>).</div>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+          <div style="background: var(--interactive-accent); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: bold; font-size: 11px;">4</div>
+          <div><strong>Collaborate!</strong>: Open any markdown note and start typing! Remote cursors and highlight ranges will render in real time.</div>
+        </div>
+      </div>
+    `;
+
     // ── Section: Profile ──
     containerEl.createEl('h3', { text: '👤 Your Profile', attr: { style: sectionHeaderStyle() } });
 
@@ -918,6 +992,22 @@ class LiveCursorSettingTab extends PluginSettingTab {
             return;
           }
           await this.plugin.configSyncEngine.syncConfig(false);
+        }));
+
+    // ── Section: Advanced Database Tools ──
+    containerEl.createEl('h3', { text: '🛠️ Advanced Database Tools', attr: { style: sectionHeaderStyle() } });
+
+    new Setting(containerEl)
+      .setName('Reconstruct Server Database')
+      .setDesc('Purges the server room-state binaries and reconstructs the server database using your current local notes as the source of truth. Use this to instantly resolve any persistent synchronization issues or phantom conflict files.')
+      .addButton(btn => btn
+        .setButtonText('⚠️ Reconstruct Database')
+        .setWarning()
+        .onClick(async () => {
+          const confirmReset = confirm('⚠️ Are you sure you want to reconstruct the server database?\n\nThis will purge all server-side document history binaries and recreate them from your current local files. Other connected devices will temporarily disconnect and automatically resync.');
+          if (confirmReset) {
+            await this.plugin.reconstructDatabase();
+          }
         }));
   }
 }

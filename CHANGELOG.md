@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.17] - 2026-05-27
+
+### Added
+- **Quick-Start Collaboration Guide**: Injected a beautifully styled, premium HSL-gradient tutorial checklist at the top of the settings page, walking users through local server start, mobile connection setup, room alignment, and real-time collaboration.
+- **Server Database Reconstruction Tool**: Added a secure "Reconstruct Database" button under Advanced Database Tools. This purges server-side memory docs and room binaries, then re-uploads current local notes as the source of truth, resolving sync conflicts seamlessly.
+
 ## [1.3.16] - 2026-05-27
 
 ### Added

@@ -357,6 +357,53 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // --- POST /api/reconstruct-db ---
+  if (pathname === '/api/reconstruct-db' && req.method === 'POST') {
+    const params = getQueryParams(req.url);
+    console.log(`[HTTP] POST /api/reconstruct-db?user=${params.user}&workspace=${params.workspace} - Reconstructing Database...`);
+
+    try {
+      // 1. Clear all active docs in memory
+      for (const [roomName, doc] of docs.entries()) {
+        try {
+          doc.destroy();
+        } catch (e) {}
+      }
+      docs.clear();
+
+      // Clear any pending timeouts
+      for (const timeout of saveTimeouts.values()) {
+        try {
+          clearTimeout(timeout);
+        } catch (e) {}
+      }
+      saveTimeouts.clear();
+
+      // 2. Delete all room binary files on disk
+      if (fs.existsSync(roomsDir)) {
+        const files = fs.readdirSync(roomsDir);
+        for (const file of files) {
+          if (file.endsWith('.bin')) {
+            try {
+              fs.unlinkSync(path.join(roomsDir, file));
+            } catch (e) {
+              console.warn(`[Database] Failed to delete file ${file}:`, e);
+            }
+          }
+        }
+        console.log('[Database] Cleared all room binary files.');
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Database room state cleared. Server memory reset.' }));
+    } catch (e) {
+      console.error(`[HTTP] 500 Error /api/reconstruct-db: ${e.message}`);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+    return;
+  }
+
   console.log(`[HTTP] 200 OK / (default root status check page)`);
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Live Cursor Sync Server (WebSocket + DB) is running.');
